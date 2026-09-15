@@ -87,13 +87,26 @@
           <button class="mode-btn active" data-mode="both">Both</button>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 0.6rem;">
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <button id="toggle-paste-btn" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">📝 Paste Lyrics</button>
           <span id="sync-badge" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 12px; background: #2a2a2a; color: var(--text-secondary); font-weight: 600;">Karaoke</span>
           
           <label class="toggle-label">
             <input type="checkbox" id="autoscroll-toggle" checked>
             Auto-scroll
           </label>
+        </div>
+      </section>
+
+      <!-- Collapsible Quick Paste Section -->
+      <section id="manual-paste-section" class="card hidden" style="padding: 1rem; border: 1px dashed var(--accent-green); margin-bottom: 0.25rem;">
+        <label style="font-size: 0.82rem; color: var(--accent-green); display: block; margin-bottom: 0.4rem; font-weight: 600;">
+          📝 Paste Japanese lyrics or .LRC format for the current track:
+        </label>
+        <textarea id="manual-lyrics-input" rows="5" placeholder="Paste lyrics from Google or .LRC format here..." style="width: 100%; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; font-family: inherit; font-size: 0.85rem; resize: vertical; margin-bottom: 0.5rem;"></textarea>
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+          <button id="cancel-manual-paste-btn" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Cancel</button>
+          <button id="submit-manual-paste-btn" class="btn btn-primary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Convert & Save Romaji ✨</button>
         </div>
       </section>
 
@@ -108,14 +121,14 @@
     </main>
   </div>
 
-  <!-- Application Logic Scripts (v8: instant lyrics render & robust dictionary loading) -->
-  <script src="js/config.js?v=8"></script>
-  <script src="js/auth.js?v=8"></script>
-  <script src="js/spotify.js?v=8"></script>
-  <script src="js/lyrics.js?v=8"></script>
-  <script src="js/romaji.js?v=8"></script>
-  <script src="js/gemini.js?v=8"></script>
-  <script src="js/neon.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
+  <!-- Application Logic Scripts (v9: fast multi-tier Romaji engine & smooth scroll/click) -->
+  <script src="js/config.js?v=9"></script>
+  <script src="js/auth.js?v=9"></script>
+  <script src="js/spotify.js?v=9"></script>
+  <script src="js/lyrics.js?v=9"></script>
+  <script src="js/romaji.js?v=9"></script>
+  <script src="js/gemini.js?v=9"></script>
+  <script src="js/neon.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
 </body>
 </html>

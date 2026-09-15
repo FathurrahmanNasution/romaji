@@ -4,6 +4,7 @@
 
 const APP = {
   currentTrackId: null,
+  currentTrackData: null,
   pollInterval: null,
   progressInterval: null,
   currentLyrics: null,
@@ -14,6 +15,11 @@ const APP = {
   currentProgressMs: 0,
   trackDurationMs: 0,
   isPlaying: false,
+
+  // User scroll & interaction flags to prevent scroll jumping/freezing
+  isUserInteracting: false,
+  userScrollTimeout: null,
+  isProgrammaticScroll: false,
 
   // Demo Track Data when user has no Spotify Client ID set up yet
   DEMO_TRACK: {
@@ -106,6 +112,43 @@ const APP = {
         }
       });
     }
+
+    // Manual Paste Section Toggle
+    const togglePasteBtn = document.getElementById('toggle-paste-btn');
+    const manualPasteSection = document.getElementById('manual-paste-section');
+    togglePasteBtn?.addEventListener('click', () => {
+      manualPasteSection?.classList.toggle('hidden');
+    });
+    document.getElementById('cancel-manual-paste-btn')?.addEventListener('click', () => {
+      manualPasteSection?.classList.add('hidden');
+    });
+    document.getElementById('submit-manual-paste-btn')?.addEventListener('click', async () => {
+      const raw = document.getElementById('manual-lyrics-input')?.value;
+      if (raw && raw.trim()) {
+        manualPasteSection?.classList.add('hidden');
+        await this.applyAndSaveCustomLyrics(raw, this.currentTrackData);
+      }
+    });
+
+    // User scroll detection on Lyrics Container
+    const container = document.getElementById('lyrics-container');
+    if (container) {
+      const markUserInteracting = () => {
+        this.isUserInteracting = true;
+        if (this.userScrollTimeout) clearTimeout(this.userScrollTimeout);
+        this.userScrollTimeout = setTimeout(() => {
+          this.isUserInteracting = false;
+        }, 3500);
+      };
+
+      container.addEventListener('wheel', markUserInteracting, { passive: true });
+      container.addEventListener('touchmove', markUserInteracting, { passive: true });
+      container.addEventListener('scroll', () => {
+        if (!this.isProgrammaticScroll) {
+          markUserInteracting();
+        }
+      }, { passive: true });
+    }
   },
 
   updateStatus(msg) {
@@ -169,6 +212,7 @@ const APP = {
 
   handlePlaybackState(data) {
     this.isPlaying = data.isPlaying;
+    this.currentTrackData = data;
     
     // Compensate for Spotify API network latency (time elapsed between Spotify snapshot and client receive)
     const latency = data.timestamp ? Math.max(0, Date.now() - data.timestamp) : 0;
@@ -182,14 +226,14 @@ const APP = {
     
     this.updateProgressUI();
 
-    // Smooth local progress interpolation if playing
-    this.startProgressTimer();
-
     // Check if track changed
     if (data.id !== this.currentTrackId) {
       this.currentTrackId = data.id;
       this.loadLyricsForTrack(data);
     }
+
+    // Start progress timer
+    this.startProgressTimer();
   },
 
   startProgressTimer() {
@@ -205,7 +249,7 @@ const APP = {
       this.currentProgressMs = Math.min(initialProgress + elapsed, this.trackDurationMs);
       this.updateProgressUI();
       this.syncActiveLyricLine();
-    }, 200);
+    }, 250);
   },
 
   updateProgressUI() {
@@ -370,51 +414,64 @@ const APP = {
     // Submit Custom Lyrics & Save permanently
     document.getElementById('submit-custom-lyrics')?.addEventListener('click', async () => {
       const rawText = document.getElementById('custom-lyrics-input')?.value;
-      if (!rawText || !rawText.trim()) return;
-
-      const parsed = LYRICS.parseCustomLyrics(rawText);
-      if (parsed && parsed.lines.length > 0) {
-        // 1. Render immediately so lyrics show up right away!
-        this.currentLyrics = {
-          isSynced: parsed.isSynced,
-          lines: parsed.lines.map(l => ({
-            ...l,
-            romaji: null,
-            isJapanese: ROMAJI.containsJapanese(l.text)
-          }))
-        };
-        this.renderLyrics();
-        this.syncActiveLyricLine();
-
-        // 2. Convert to Romaji in the background
-        const hasJapanese = parsed.lines.some(l => ROMAJI.containsJapanese(l.text));
-        if (hasJapanese) {
-          this.updateStatus('Converting to Romaji...');
-          const processedLines = await ROMAJI.convertLyrics(parsed.lines, (msg) => {
-            this.updateStatus(msg);
-          });
-
-          this.currentLyrics = {
-            isSynced: parsed.isSynced,
-            lines: processedLines
-          };
-          this.renderLyrics();
-          this.syncActiveLyricLine();
-        }
-
-        // 3. Save permanently in localStorage & Neon Cloud Database
-        if (trackData && trackData.id) {
-          localStorage.setItem(`custom_lyrics_${trackData.id}`, JSON.stringify(this.currentLyrics));
-          localStorage.setItem(`custom_lyrics_${encodeURIComponent(trackData.title)}`, JSON.stringify(this.currentLyrics));
-          
-          if (typeof NEON !== 'undefined') {
-            NEON.saveLyrics(trackData.id, trackData.title, trackData.artist, this.currentLyrics);
-          }
-        }
-
-        this.updateStatus('Lyrics saved & ready!');
+      const submitBtn = document.getElementById('submit-custom-lyrics');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Converting to Romaji...';
       }
+      await this.applyAndSaveCustomLyrics(rawText, trackData);
     });
+  },
+
+  async applyAndSaveCustomLyrics(rawText, trackData) {
+    if (!rawText || !rawText.trim()) return;
+
+    const parsed = LYRICS.parseCustomLyrics(rawText);
+    if (!parsed || !parsed.lines || parsed.lines.length === 0) {
+      alert('Could not detect any lyrics lines. Please check your text.');
+      return;
+    }
+
+    // 1. Render immediately so user sees their lyrics right away with instant Kana preview
+    this.currentLyrics = {
+      isSynced: parsed.isSynced,
+      lines: parsed.lines.map(l => ({
+        ...l,
+        romaji: ROMAJI.containsJapanese(l.text) ? ROMAJI.kanaToRomaji(l.text) : null,
+        isJapanese: ROMAJI.containsJapanese(l.text)
+      }))
+    };
+    this.renderLyrics();
+    this.syncActiveLyricLine();
+
+    // 2. Convert Japanese lyrics to Romaji (with Gemini AI / Kuroshiro)
+    const hasJapanese = parsed.lines.some(l => ROMAJI.containsJapanese(l.text));
+    if (hasJapanese) {
+      this.updateStatus('Converting lyrics to Romaji...');
+      const processedLines = await ROMAJI.convertLyrics(parsed.lines, (msg) => {
+        this.updateStatus(msg);
+      });
+
+      this.currentLyrics = {
+        isSynced: parsed.isSynced,
+        lines: processedLines
+      };
+      this.renderLyrics();
+      this.syncActiveLyricLine();
+    }
+
+    // 3. Save permanently in localStorage & Neon Cloud Database
+    const t = trackData || this.currentTrackData;
+    if (t && (t.id || t.title)) {
+      if (t.id) localStorage.setItem(`custom_lyrics_${t.id}`, JSON.stringify(this.currentLyrics));
+      if (t.title) localStorage.setItem(`custom_lyrics_${encodeURIComponent(t.title)}`, JSON.stringify(this.currentLyrics));
+      
+      if (typeof NEON !== 'undefined') {
+        NEON.saveLyrics(t.id, t.title, t.artist, this.currentLyrics);
+      }
+    }
+
+    this.updateStatus('Lyrics converted to Romaji & saved! ✨');
   },
 
   async executeGeminiSearch(trackData, apiKey) {
@@ -489,17 +546,27 @@ const APP = {
         lineEl.dataset.timeMs = line.timeMs;
       }
 
-      // User click on line
-      lineEl.addEventListener('click', () => {
+      // Responsive Click on line (with user interaction guard to prevent jitter)
+      lineEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.isUserInteracting = true;
+        if (this.userScrollTimeout) clearTimeout(this.userScrollTimeout);
+        this.userScrollTimeout = setTimeout(() => {
+          this.isUserInteracting = false;
+        }, 4000);
+
+        this.activeLineIndex = index;
+        document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('active'));
+        lineEl.classList.add('active');
+
         if (isSynced && line.timeMs !== null) {
           this.currentProgressMs = line.timeMs;
           this.updateProgressUI();
-          this.syncActiveLyricLine();
-        } else {
-          this.activeLineIndex = index;
-          document.querySelectorAll('.lyric-line').forEach(el => el.classList.remove('active'));
-          lineEl.classList.add('active');
-          if (this.autoScroll) this.scrollToActiveLine();
+          this.startProgressTimer();
+        }
+
+        if (this.autoScroll) {
+          this.scrollToActiveLine();
         }
       });
 
@@ -547,8 +614,9 @@ const APP = {
         }
       }
     } else {
-      // 2. Smart Proportional Progress matching for saved & unsynced lyrics!
-      // Estimates line progress between 4% intro and 96% outro of song duration
+      // 2. Unsynced plain lyrics: if user recently clicked or scrolled, don't interrupt!
+      if (this.isUserInteracting) return;
+
       const startMs = duration * 0.04;
       const endMs = duration * 0.96;
       
@@ -574,7 +642,7 @@ const APP = {
       const newActive = document.querySelector(`.lyric-line[data-index="${newActiveIndex}"]`);
       if (newActive) {
         newActive.classList.add('active');
-        if (this.autoScroll) {
+        if (this.autoScroll && !this.isUserInteracting) {
           this.scrollToActiveLine();
         }
       }
@@ -582,6 +650,8 @@ const APP = {
   },
 
   scrollToActiveLine() {
+    if (this.isUserInteracting) return; // Don't fight user gestures!
+
     const container = document.getElementById('lyrics-container');
     const activeEl = document.querySelector('.lyric-line.active');
 
@@ -591,10 +661,12 @@ const APP = {
       const activeHeight = activeEl.clientHeight;
 
       const targetScroll = activeTop - (containerHeight / 2) + (activeHeight / 2);
+      this.isProgrammaticScroll = true;
       container.scrollTo({
         top: Math.max(0, targetScroll),
         behavior: 'smooth'
       });
+      setTimeout(() => { this.isProgrammaticScroll = false; }, 350);
     }
   },
 

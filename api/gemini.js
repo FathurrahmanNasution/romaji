@@ -26,10 +26,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel environment' });
   }
 
-  const { trackTitle, artistName } = req.body || {};
-  if (!trackTitle) {
-    return res.status(400).json({ error: 'Missing trackTitle in request body' });
-  }
+  const { trackTitle, artistName, action, lines } = req.body || {};
 
   const models = [
     'gemini-3.5-flash-lite',
@@ -38,6 +35,70 @@ export default async function handler(req, res) {
     'gemini-3.7-flash',
     'gemini-3.8-flash'
   ];
+
+  // Action: Convert Japanese lyric lines to Romaji
+  if (action === 'romaji' || (Array.isArray(lines) && lines.length > 0 && !trackTitle)) {
+    const inputLines = Array.isArray(lines) ? lines : [];
+    if (inputLines.length === 0) {
+      return res.status(400).json({ error: 'Missing lines to convert' });
+    }
+
+    const promptText = `Convert the following Japanese lyric lines into natural Romaji (Hepburn romanization) line-by-line.
+Preserve line ordering and count exactly. Keep non-Japanese words as-is.
+Return ONLY valid JSON matching this exact structure:
+{
+  "romajiLines": [
+    "Romaji line 1",
+    "Romaji line 2"
+  ]
+}
+Lines:
+${JSON.stringify(inputLines)}`;
+
+    let lastError = null;
+    for (const model of models) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+          })
+        });
+
+        if (!response.ok) {
+          const errJson = await response.json().catch(() => ({}));
+          lastError = errJson.error?.message || `HTTP ${response.status}`;
+          continue;
+        }
+
+        const result = await response.json();
+        const candidate = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!candidate) continue;
+
+        const jsonStr = candidate.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        const parsed = JSON.parse(jsonStr);
+
+        if (Array.isArray(parsed.romajiLines) && parsed.romajiLines.length > 0) {
+          return res.status(200).json({
+            found: true,
+            romajiLines: parsed.romajiLines,
+            model: model
+          });
+        }
+      } catch (err) {
+        lastError = err.message;
+      }
+    }
+
+    return res.status(200).json({ found: false, message: lastError || 'Romaji conversion failed' });
+  }
+
+  if (!trackTitle) {
+    return res.status(400).json({ error: 'Missing trackTitle in request body' });
+  }
 
   const promptText = `Provide the full lyrics for the song titled "${trackTitle}" by "${artistName || ''}".
 If the song is in Japanese, translate each line into Romaji transliteration line-by-line.
