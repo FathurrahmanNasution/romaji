@@ -28,15 +28,36 @@ const ROMAJI = {
       }
 
       this.kuroshiro = new Kuroshiro.default ? new Kuroshiro.default() : new Kuroshiro();
-      const analyzer = new KuromojiAnalyzer({
-        dictPath: CONFIG.KUROMOJI_DICT_PATH
-      });
+      
+      const dictPaths = [
+        CONFIG.KUROMOJI_DICT_PATH,
+        "https://cdn.jsdelivr.net/gh/takuyaa/kuromoji.js@gh-pages/demo/kuromoji/dict/",
+        "https://unpkg.com/kuromoji@0.1.2/dict/"
+      ];
 
-      await this.kuroshiro.init(analyzer);
-      this.isReady = true;
+      let initialized = false;
+      for (const path of dictPaths) {
+        if (!path) continue;
+        try {
+          const analyzer = new KuromojiAnalyzer({ dictPath: path });
+          // Timeout after 8 seconds so it doesn't get stuck forever
+          await Promise.race([
+            this.kuroshiro.init(analyzer),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Dict load timeout')), 8000))
+          ]);
+          initialized = true;
+          break;
+        } catch (e) {
+          console.warn(`Failed loading dictionary from ${path}:`, e);
+        }
+      }
+
+      this.isReady = initialized;
       this.isInitializing = false;
-      console.log('Kuroshiro + Kuromoji initialized successfully');
-      return true;
+      if (this.isReady) {
+        console.log('Kuroshiro + Kuromoji initialized successfully');
+      }
+      return this.isReady;
     } catch (err) {
       console.error('Kuroshiro initialization error:', err);
       this.isInitializing = false;

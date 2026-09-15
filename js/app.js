@@ -273,18 +273,8 @@ const APP = {
     }
 
     if (!lyricResult.found || !lyricResult.lines || lyricResult.lines.length === 0) {
-      const geminiKey = (CONFIG.GEMINI_API_KEY && !CONFIG.GEMINI_API_KEY.includes('PASTE_GEMINI_API_KEY'))
-        ? CONFIG.GEMINI_API_KEY
-        : localStorage.getItem('gemini_api_key');
-
-      if (geminiKey) {
-        console.log('LRCLIB lyrics not found, automatically triggering Gemini AI search...');
-        this.executeGeminiSearch(trackData, geminiKey);
-        return;
-      }
-
-      this.renderLyricsError(lyricResult.message || 'Lyrics not found for this track', trackData);
-      this.currentLyrics = null;
+      console.log('LRCLIB lyrics not found, attempting Gemini AI search...');
+      this.executeGeminiSearch(trackData);
       return;
     }
 
@@ -374,13 +364,7 @@ const APP = {
 
     // Gemini Retry
     document.getElementById('gemini-search-btn')?.addEventListener('click', () => {
-      const currentKey = CONFIG.GEMINI_API_KEY && !CONFIG.GEMINI_API_KEY.includes('PASTE_GEMINI_API_KEY') 
-        ? CONFIG.GEMINI_API_KEY 
-        : localStorage.getItem('gemini_api_key');
-
-      if (currentKey) {
-        this.executeGeminiSearch(trackData, currentKey);
-      }
+      this.executeGeminiSearch(trackData);
     });
 
     // Submit Custom Lyrics & Save permanently
@@ -390,18 +374,35 @@ const APP = {
 
       const parsed = LYRICS.parseCustomLyrics(rawText);
       if (parsed && parsed.lines.length > 0) {
-        this.renderLyricsLoading('Converting Japanese text to Romaji...');
-        
-        const processedLines = await ROMAJI.convertLyrics(parsed.lines, (msg) => {
-          this.renderLyricsLoading(msg);
-        });
-
+        // 1. Render immediately so lyrics show up right away!
         this.currentLyrics = {
           isSynced: parsed.isSynced,
-          lines: processedLines
+          lines: parsed.lines.map(l => ({
+            ...l,
+            romaji: null,
+            isJapanese: ROMAJI.containsJapanese(l.text)
+          }))
         };
+        this.renderLyrics();
+        this.syncActiveLyricLine();
 
-        // Save permanently in localStorage & Neon Cloud Database!
+        // 2. Convert to Romaji in the background
+        const hasJapanese = parsed.lines.some(l => ROMAJI.containsJapanese(l.text));
+        if (hasJapanese) {
+          this.updateStatus('Converting to Romaji...');
+          const processedLines = await ROMAJI.convertLyrics(parsed.lines, (msg) => {
+            this.updateStatus(msg);
+          });
+
+          this.currentLyrics = {
+            isSynced: parsed.isSynced,
+            lines: processedLines
+          };
+          this.renderLyrics();
+          this.syncActiveLyricLine();
+        }
+
+        // 3. Save permanently in localStorage & Neon Cloud Database
         if (trackData && trackData.id) {
           localStorage.setItem(`custom_lyrics_${trackData.id}`, JSON.stringify(this.currentLyrics));
           localStorage.setItem(`custom_lyrics_${encodeURIComponent(trackData.title)}`, JSON.stringify(this.currentLyrics));
@@ -411,8 +412,7 @@ const APP = {
           }
         }
 
-        this.renderLyrics();
-        this.syncActiveLyricLine();
+        this.updateStatus('Lyrics saved & ready!');
       }
     });
   },
