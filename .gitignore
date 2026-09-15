@@ -1,0 +1,13 @@
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+
+# Dependency and temporary folders
+node_modules/
+scratch/
+.system_generated/
+.vercel/
+
+# Markdown Documentation (Do not push per user request)
+*.md
