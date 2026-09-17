@@ -126,7 +126,11 @@ const ROMAJI = {
 
   initWorker() {
     if (this.worker) return;
-    this.worker = new Worker('js/romaji-worker.js');
+    // Cache bust the worker to ensure Vercel loads the newest version
+    this.worker = new Worker('/js/romaji-worker.js?v=17');
+    this.worker.onerror = (err) => {
+      console.error("Worker creation failed:", err);
+    };
     this.worker.onmessage = (e) => {
       const { id } = e.data;
       if (this.resolvers.has(id)) {
