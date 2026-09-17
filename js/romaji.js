@@ -180,33 +180,29 @@ const ROMAJI = {
       return lines.map(l => ({ ...l, romaji: null, isJapanese: false }));
     }
 
-    // Tier 1: Wait for Kuroshiro/Kuromoji init (start it if not yet started)
-    if (!this.initPromise) {
+    // Trigger non-blocking background Kuroshiro init if not started yet
+    if (!this.isReady && !this.initPromise) {
       this.init();
     }
 
-    // Wait for Kuroshiro to finish initializing (it may still be loading the dict)
-    const kuroshiroReady = await this.initPromise;
-
-    if (kuroshiroReady && this.isReady && this.kuroshiro) {
+    // If Kuroshiro dictionary is already ready, run fast parallel conversion
+    if (this.isReady && this.kuroshiro) {
       if (onProgressCallback) onProgressCallback('Converting lyrics to Romaji...');
       try {
-        const converted = [];
-        for (const line of lines) {
+        const converted = await Promise.all(lines.map(async (line) => {
           if (this.containsJapanese(line.text)) {
             const romajiText = await this.convertText(line.text);
-            converted.push({ ...line, romaji: romajiText, isJapanese: true });
-          } else {
-            converted.push({ ...line, romaji: null, isJapanese: false });
+            return { ...line, romaji: romajiText, isJapanese: true };
           }
-        }
+          return { ...line, romaji: null, isJapanese: false };
+        }));
         return converted;
       } catch (e) {
         console.warn('Kuroshiro conversion error, falling back:', e);
       }
     }
 
-    // Tier 2: Instant client-side Kana transliteration fallback (0ms, 100% offline)
+    // Instant client-side Kana transliteration fallback (0ms, 100% offline, zero network waiting)
     if (onProgressCallback) onProgressCallback('Applying Kana Romaji transliteration...');
     return lines.map(line => {
       const isJp = this.containsJapanese(line.text);
