@@ -10,11 +10,6 @@
  */
 
 const ROMAJI = {
-  kuroshiro: null,
-  initPromise: null,
-  isReady: false,
-  conversionCache: new Map(),
-
   DIGRAPHS: {
     'きゃ':'kya','きゅ':'kyu','きょ':'kyo','ぎゃ':'gya','ぎゅ':'gyu','ぎょ':'gyo',
     'しゃ':'sha','しゅ':'shu','しょ':'sho','じゃ':'ja','じゅ':'ju','じょ':'jo',
@@ -125,53 +120,6 @@ const ROMAJI = {
     return result;
   },
 
-  init() {
-    if (this.isReady) return Promise.resolve(true);
-    if (this.initPromise) return this.initPromise;
-
-    this.initPromise = (async () => {
-      try {
-        if (typeof Kuroshiro === 'undefined' || typeof KuromojiAnalyzer === 'undefined') {
-          return false;
-        }
-
-        this.kuroshiro = new Kuroshiro.default ? new Kuroshiro.default() : new Kuroshiro();
-        const dictPath = CONFIG.KUROMOJI_DICT_PATH || "https://cdn.jsdelivr.net/gh/takuyaa/kuromoji.js@gh-pages/demo/kuromoji/dict/";
-        
-        const analyzer = new KuromojiAnalyzer({ dictPath });
-        await Promise.race([
-          this.kuroshiro.init(analyzer),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Kuromoji timeout')), 2500))
-        ]);
-
-        this.isReady = true;
-        console.log('Kuroshiro + Kuromoji initialized');
-        return true;
-      } catch (err) {
-        console.info('Kuroshiro local dictionary not available, using Gemini AI + Kana fallback');
-        this.isReady = false;
-        return false;
-      }
-    })();
-
-    return this.initPromise;
-  },
-
-  async convertText(text) {
-    if (!text || !this.containsJapanese(text)) return text;
-    if (this.conversionCache.has(text)) return this.conversionCache.get(text);
-
-    if (this.isReady && this.kuroshiro) {
-      try {
-        const romaji = await this.kuroshiro.convert(text, { to: 'romaji', mode: 'spaced' });
-        this.conversionCache.set(text, romaji);
-        return romaji;
-      } catch (e) {}
-    }
-
-    return this.kanaToRomaji(text);
-  },
-
   async convertLyrics(lines, onProgressCallback) {
     if (!lines || lines.length === 0) return lines;
 
@@ -180,53 +128,21 @@ const ROMAJI = {
       return lines.map(l => ({ ...l, romaji: null, isJapanese: false }));
     }
 
-    // Kana-only instant fallback helper (always available, 0ms)
-    const kanaFallback = () => lines.map(line => {
-      const isJp = this.containsJapanese(line.text);
-      return { ...line, romaji: isJp ? this.kanaToRomaji(line.text) : null, isJapanese: isJp };
-    });
-
-    // Try Kuroshiro with a strict 8-second cap so it can never freeze the page
-    const kuroshiroAttempt = async () => {
-      // Wait for init if not yet attempted
-      if (!this.initPromise) this.init();
-      // Await with a timeout so we don't block forever
-      const ready = await Promise.race([
-        this.initPromise,
-        new Promise(resolve => setTimeout(() => resolve(false), 8000))
-      ]);
-
-      if (!ready || !this.isReady || !this.kuroshiro) {
-        return null; // Signal: fall back to kana
-      }
-
-      if (onProgressCallback) onProgressCallback('Converting lyrics to Romaji...');
-      return await Promise.all(lines.map(async (line) => {
-        if (this.containsJapanese(line.text)) {
-          try {
-            const romajiText = await this.convertText(line.text);
-            return { ...line, romaji: romajiText, isJapanese: true };
-          } catch (e) {
-            return { ...line, romaji: this.kanaToRomaji(line.text), isJapanese: true };
-          }
-        }
-        return { ...line, romaji: null, isJapanese: false };
-      }));
-    };
-
-    try {
-      const result = await Promise.race([
-        kuroshiroAttempt(),
-        new Promise(resolve => setTimeout(() => resolve(null), 10000)) // Hard 10s cap
-      ]);
-
-      if (result) return result;
-    } catch (e) {
-      console.warn('Kuroshiro conversion error, using kana fallback:', e);
-    }
-
-    // Instant client-side Kana transliteration fallback (0ms, 100% offline)
+    // Instant client-side Kana transliteration (0ms, 100% offline)
     if (onProgressCallback) onProgressCallback('Applying Kana Romaji transliteration...');
-    return kanaFallback();
+    
+    // Yield to the event loop so the UI doesn't block while parsing large lyrics
+    return new Promise(resolve => {
+      setTimeout(() => {
+        resolve(lines.map(line => {
+          const isJp = this.containsJapanese(line.text);
+          return {
+            ...line,
+            romaji: isJp ? this.kanaToRomaji(line.text) : null,
+            isJapanese: isJp
+          };
+        }));
+      }, 0);
+    });
   }
 };
