@@ -487,10 +487,10 @@ const APP = {
     }
 
     // 3. Save permanently ONLY to Neon Cloud Database
-    const t = trackData || this.currentTrackData;
+    const t = trackData || this.currentTrackData || { id: `custom_${Date.now()}`, title: 'Custom Track', artist: 'Unknown' };
     if (t && (t.id || t.title)) {
       if (typeof NEON !== 'undefined') {
-        NEON.saveLyrics(t.id, t.title, t.artist, this.currentLyrics);
+        NEON.saveLyrics(t.id || `custom_${Date.now()}`, t.title || 'Custom Track', t.artist || 'Unknown', this.currentLyrics);
       }
     }
 

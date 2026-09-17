@@ -141,7 +141,7 @@ const ROMAJI = {
         const analyzer = new KuromojiAnalyzer({ dictPath });
         await Promise.race([
           this.kuroshiro.init(analyzer),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Kuromoji timeout')), 15000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Kuromoji timeout')), 2500))
         ]);
 
         this.isReady = true;

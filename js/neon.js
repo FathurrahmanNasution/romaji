@@ -88,11 +88,11 @@ const NEON = {
         const safeId = (trackId || '').replace(/'/g, "''").trim();
         const safeTitle = (trackTitle || '').replace(/'/g, "''").trim();
         const safeArtist = (artistName || '').replace(/'/g, "''").trim();
-        const jsonData = JSON.stringify(lyricsData).replace(/'/g, "''");
+        const jsonData = JSON.stringify(lyricsData);
 
         const query = `
           INSERT INTO lyrics (track_id, track_title, artist_name, lyrics_data)
-          VALUES ('${safeId}', '${safeTitle}', '${safeArtist}', '${jsonData}')
+          VALUES ('${safeId}', '${safeTitle}', '${safeArtist}', $LYRICS$${jsonData}$LYRICS$)
           ON CONFLICT (track_id) 
           DO UPDATE SET 
             track_title = EXCLUDED.track_title,

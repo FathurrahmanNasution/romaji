@@ -82,7 +82,7 @@ export default async function handler(req, res) {
 
     const query = `
       INSERT INTO lyrics (track_id, track_title, artist_name, lyrics_data)
-      VALUES ('${safeId}', '${safeTitle}', '${safeArtist}', '${jsonData}')
+      VALUES ('${safeId}', '${safeTitle}', '${safeArtist}', $LYRICS$${jsonData}$LYRICS$)
       ON CONFLICT (track_id) 
       DO UPDATE SET 
         track_title = EXCLUDED.track_title,
