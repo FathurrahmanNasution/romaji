@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/lyrics.js": {
+      "maxDuration": 30
+    }
+  }
+}

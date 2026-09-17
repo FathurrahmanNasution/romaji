@@ -41,14 +41,18 @@ export default async function handler(req, res) {
     `;
 
     try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 8000); // 8s cap — Vercel hobby limit is 10s
       const dbRes = await fetch(neonHttpUrl, {
         method: 'POST',
         headers: {
           'Neon-Connection-String': connString,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ query }),
+        signal: ctrl.signal
       });
+      clearTimeout(tid);
 
       if (!dbRes.ok) {
         return res.status(dbRes.status).json({ error: 'Neon database query failed' });
@@ -91,14 +95,18 @@ export default async function handler(req, res) {
     `;
 
     try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 8000); // 8s cap — Vercel hobby limit is 10s
       const dbRes = await fetch(neonHttpUrl, {
         method: 'POST',
         headers: {
           'Neon-Connection-String': connString,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ query }),
+        signal: ctrl.signal
       });
+      clearTimeout(tid);
 
       if (!dbRes.ok) {
         return res.status(dbRes.status).json({ error: 'Failed to insert lyrics in Neon DB' });
