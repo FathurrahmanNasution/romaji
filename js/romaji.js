@@ -39,7 +39,7 @@ const ROMAJI = {
     'さ':'sa','し':'shi','す':'su','せ':'se','そ':'so',
     'ざ':'za','じ':'ji','ず':'zu','ぜ':'ze','ぞ':'zo',
     'た':'ta','ち':'chi','つ':'tsu','て':'te','と':'to',
-    'だ':'da','ぢ':'ji','づ':'zu','de':'de','ど':'do',
+    'だ':'da','ぢ':'ji','づ':'zu','で':'de','ど':'do',
     'な':'na','に':'ni','ぬ':'nu','ね':'ne','の':'no',
     'は':'ha','ひ':'hi','ふ':'fu','へ':'he','ほ':'ho',
     'ば':'ba','び':'bi','ぶ':'bu','べ':'be','ぼ':'bo',
@@ -175,8 +175,8 @@ const ROMAJI = {
           this.worker.postMessage({ id, type: 'CONVERT', payload: lines });
         });
 
-        // 12s timeout for worker
-        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ error: 'timeout' }), 12000));
+        // 20s timeout for worker
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ error: 'timeout' }), 20000));
         
         const response = await Promise.race([workerPromise, timeoutPromise]);
         
@@ -188,6 +188,8 @@ const ROMAJI = {
             }
             return r;
           });
+        } else if (response.error) {
+          console.error("Worker conversion error:", response.error);
         }
       } catch (e) {
         console.warn('Worker conversion failed, falling back to kana', e);
