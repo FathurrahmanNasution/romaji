@@ -1,5 +1,6 @@
 /**
  * Main Application Orchestrator
+ * (Gemini integration rolled back as per user request, sticking to pure local Kuroshiro worker)
  */
 
 const APP = {
