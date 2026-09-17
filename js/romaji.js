@@ -10,6 +10,10 @@
  */
 
 const ROMAJI = {
+  worker: null,
+  resolvers: new Map(),
+  messageIdCounter: 0,
+  
   DIGRAPHS: {
     'きゃ':'kya','きゅ':'kyu','きょ':'kyo','ぎゃ':'gya','ぎゅ':'gyu','ぎょ':'gyo',
     'しゃ':'sha','しゅ':'shu','しょ':'sho','じゃ':'ja','じゅ':'ju','じょ':'jo',
@@ -120,6 +124,20 @@ const ROMAJI = {
     return result;
   },
 
+  initWorker() {
+    if (this.worker) return;
+    this.worker = new Worker('js/romaji-worker.js');
+    this.worker.onmessage = (e) => {
+      const { id } = e.data;
+      if (this.resolvers.has(id)) {
+        this.resolvers.get(id)(e.data);
+        this.resolvers.delete(id);
+      }
+    };
+    // Pre-initialize dictionary parsing in background
+    this.worker.postMessage({ id: -1, type: 'INIT' });
+  },
+
   async convertLyrics(lines, onProgressCallback) {
     if (!lines || lines.length === 0) return lines;
 
@@ -128,21 +146,56 @@ const ROMAJI = {
       return lines.map(l => ({ ...l, romaji: null, isJapanese: false }));
     }
 
-    // Instant client-side Kana transliteration (0ms, 100% offline)
+    if (!this.worker) this.initWorker();
+
+    const hasKanji = lines.some(l => this.containsKanji(l.text));
+
+    // Kana-only instant fallback helper
+    const kanaFallback = () => {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          resolve(lines.map(line => {
+            const isJp = this.containsJapanese(line.text);
+            return {
+              ...line,
+              romaji: isJp ? this.kanaToRomaji(line.text) : null,
+              isJapanese: isJp
+            };
+          }));
+        }, 0);
+      });
+    };
+
+    if (hasKanji) {
+      if (onProgressCallback) onProgressCallback('Converting Kanji to Romaji (Worker)...');
+      try {
+        const id = this.messageIdCounter++;
+        const workerPromise = new Promise((resolve) => {
+          this.resolvers.set(id, resolve);
+          this.worker.postMessage({ id, type: 'CONVERT', payload: lines });
+        });
+
+        // 12s timeout for worker
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ error: 'timeout' }), 12000));
+        
+        const response = await Promise.race([workerPromise, timeoutPromise]);
+        
+        if (!response.error && response.result) {
+          // If any specific line failed inside worker, apply kana fallback to that line
+          return response.result.map(r => {
+            if (r.isJapanese && !r.romaji) {
+               r.romaji = this.kanaToRomaji(r.text);
+            }
+            return r;
+          });
+        }
+      } catch (e) {
+        console.warn('Worker conversion failed, falling back to kana', e);
+      }
+    }
+
+    // Fallback if no Kanji or worker failed/timed out
     if (onProgressCallback) onProgressCallback('Applying Kana Romaji transliteration...');
-    
-    // Yield to the event loop so the UI doesn't block while parsing large lyrics
-    return new Promise(resolve => {
-      setTimeout(() => {
-        resolve(lines.map(line => {
-          const isJp = this.containsJapanese(line.text);
-          return {
-            ...line,
-            romaji: isJp ? this.kanaToRomaji(line.text) : null,
-            isJapanese: isJp
-          };
-        }));
-      }, 0);
-    });
+    return kanaFallback();
   }
 };

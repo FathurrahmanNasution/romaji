@@ -11,3 +11,5 @@ scratch/
 
 # Markdown Documentation (Do not push per user request)
 *.md
+.vercel
+.env*
