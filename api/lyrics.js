@@ -18,10 +18,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const connString = process.env.NEON_CONN_STRING;
-  if (!connString) {
-    return res.status(500).json({ error: 'NEON_CONN_STRING not set in Vercel environment' });
-  }
+  const connString = process.env.NEON_CONN_STRING || "postgresql://neondb_owner:npg_mfxoTXrF08Be@ep-muddy-glade-b3itscs5-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
   const neonHttpUrl = 'https://ep-muddy-glade-b3itscs5.c-4.ap-southeast-1.aws.neon.tech/sql';
 
