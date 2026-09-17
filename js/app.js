@@ -344,9 +344,10 @@ const APP = {
     if (this.isDemoMode) {
       lyricResult = LYRICS.processLyricData({ syncedLyrics: this.DEMO_LRC });
     } else {
+      // NOTE: fetchLyrics(trackName, artistName, durationMs) — title first, then artist
       lyricResult = await LYRICS.fetchLyrics(
-        trackData.primaryArtist || trackData.artist,
         trackData.title,
+        trackData.primaryArtist || trackData.artist,
         trackData.durationMs
       );
     }
@@ -373,18 +374,23 @@ const APP = {
     if (hasJapanese) {
       this.updateStatus('Converting Japanese lyrics to Romaji...');
       
-      const processedLines = await ROMAJI.convertLyrics(lyricResult.lines, (msg) => {
-        this.updateStatus(msg);
-      });
+      try {
+        const processedLines = await ROMAJI.convertLyrics(lyricResult.lines, (msg) => {
+          this.updateStatus(msg);
+        });
 
-      this.currentLyrics = {
-        isSynced: lyricResult.isSynced,
-        lines: processedLines
-      };
+        this.currentLyrics = {
+          isSynced: lyricResult.isSynced,
+          lines: processedLines
+        };
 
-      this.renderLyrics();
-      this.syncActiveLyricLine();
-      this.updateStatus('Lyrics ready!');
+        this.renderLyrics();
+        this.syncActiveLyricLine();
+        this.updateStatus('Lyrics ready!');
+      } catch (romajiErr) {
+        console.warn('Romaji conversion error (non-fatal):', romajiErr);
+        this.updateStatus('Lyrics ready (Romaji unavailable)');
+      }
     }
   },
 
@@ -486,11 +492,13 @@ const APP = {
       this.syncActiveLyricLine();
     }
 
-    // 3. Save permanently ONLY to Neon Cloud Database
+    // 3. Save permanently ONLY to Neon Cloud Database (fire-and-forget, never blocks UI)
     const t = trackData || this.currentTrackData || { id: `custom_${Date.now()}`, title: 'Custom Track', artist: 'Unknown' };
     if (t && (t.id || t.title)) {
       if (typeof NEON !== 'undefined') {
-        NEON.saveLyrics(t.id || `custom_${Date.now()}`, t.title || 'Custom Track', t.artist || 'Unknown', this.currentLyrics);
+        // Non-blocking: save in background, don't await
+        NEON.saveLyrics(t.id || `custom_${Date.now()}`, t.title || 'Custom Track', t.artist || 'Unknown', this.currentLyrics)
+          .catch(e => console.warn('Neon save error (non-fatal):', e));
       }
     }
 

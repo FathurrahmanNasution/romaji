@@ -180,37 +180,53 @@ const ROMAJI = {
       return lines.map(l => ({ ...l, romaji: null, isJapanese: false }));
     }
 
-    // Trigger non-blocking background Kuroshiro init if not started yet
-    if (!this.isReady && !this.initPromise) {
-      this.init();
-    }
+    // Kana-only instant fallback helper (always available, 0ms)
+    const kanaFallback = () => lines.map(line => {
+      const isJp = this.containsJapanese(line.text);
+      return { ...line, romaji: isJp ? this.kanaToRomaji(line.text) : null, isJapanese: isJp };
+    });
 
-    // If Kuroshiro dictionary is already ready, run fast parallel conversion
-    if (this.isReady && this.kuroshiro) {
+    // Try Kuroshiro with a strict 8-second cap so it can never freeze the page
+    const kuroshiroAttempt = async () => {
+      // Wait for init if not yet attempted
+      if (!this.initPromise) this.init();
+      // Await with a timeout so we don't block forever
+      const ready = await Promise.race([
+        this.initPromise,
+        new Promise(resolve => setTimeout(() => resolve(false), 8000))
+      ]);
+
+      if (!ready || !this.isReady || !this.kuroshiro) {
+        return null; // Signal: fall back to kana
+      }
+
       if (onProgressCallback) onProgressCallback('Converting lyrics to Romaji...');
-      try {
-        const converted = await Promise.all(lines.map(async (line) => {
-          if (this.containsJapanese(line.text)) {
+      return await Promise.all(lines.map(async (line) => {
+        if (this.containsJapanese(line.text)) {
+          try {
             const romajiText = await this.convertText(line.text);
             return { ...line, romaji: romajiText, isJapanese: true };
+          } catch (e) {
+            return { ...line, romaji: this.kanaToRomaji(line.text), isJapanese: true };
           }
-          return { ...line, romaji: null, isJapanese: false };
-        }));
-        return converted;
-      } catch (e) {
-        console.warn('Kuroshiro conversion error, falling back:', e);
-      }
+        }
+        return { ...line, romaji: null, isJapanese: false };
+      }));
+    };
+
+    try {
+      const result = await Promise.race([
+        kuroshiroAttempt(),
+        new Promise(resolve => setTimeout(() => resolve(null), 10000)) // Hard 10s cap
+      ]);
+
+      if (result) return result;
+    } catch (e) {
+      console.warn('Kuroshiro conversion error, using kana fallback:', e);
     }
 
-    // Instant client-side Kana transliteration fallback (0ms, 100% offline, zero network waiting)
+    // Instant client-side Kana transliteration fallback (0ms, 100% offline)
     if (onProgressCallback) onProgressCallback('Applying Kana Romaji transliteration...');
-    return lines.map(line => {
-      const isJp = this.containsJapanese(line.text);
-      return {
-        ...line,
-        romaji: isJp ? this.kanaToRomaji(line.text) : null,
-        isJapanese: isJp
-      };
-    });
+    return kanaFallback();
   }
 };

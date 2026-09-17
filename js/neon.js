@@ -8,12 +8,13 @@ const NEON = {
     try {
       const apiUrl = `/api/lyrics?trackId=${encodeURIComponent(trackId || '')}&trackTitle=${encodeURIComponent(trackTitle || '')}`;
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 5000);
+      const tid = setTimeout(() => ctrl.abort(), 12000); // 12s: Vercel cold starts can be slow
       const apiRes = await fetch(apiUrl, { signal: ctrl.signal });
       clearTimeout(tid);
       if (apiRes.ok) {
-        const data = await apiRes.json();
-        if (data.found && data.lyrics) {
+        let data;
+        try { data = await apiRes.json(); } catch (e) { data = null; }
+        if (data && data.found && data.lyrics) {
           console.log('✅ Loaded from Neon DB via /api/lyrics:', trackTitle);
           return data.lyrics;
         }
@@ -64,7 +65,7 @@ const NEON = {
   async saveLyrics(trackId, trackTitle, artistName, lyricsData) {
     try {
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 5000);
+      const tid = setTimeout(() => ctrl.abort(), 12000); // 12s: Vercel cold starts can be slow
       const apiRes = await fetch('/api/lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
