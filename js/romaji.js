@@ -141,7 +141,7 @@ const ROMAJI = {
         const analyzer = new KuromojiAnalyzer({ dictPath });
         await Promise.race([
           this.kuroshiro.init(analyzer),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Kuromoji timeout')), 3500))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Kuromoji timeout')), 15000))
         ]);
 
         this.isReady = true;
@@ -180,13 +180,15 @@ const ROMAJI = {
       return lines.map(l => ({ ...l, romaji: null, isJapanese: false }));
     }
 
-    // Trigger non-blocking init attempt if not started yet
-    if (!this.isReady && !this.initPromise) {
+    // Tier 1: Wait for Kuroshiro/Kuromoji init (start it if not yet started)
+    if (!this.initPromise) {
       this.init();
     }
 
-    // Check if Kuroshiro is already ready
-    if (this.isReady && this.kuroshiro) {
+    // Wait for Kuroshiro to finish initializing (it may still be loading the dict)
+    const kuroshiroReady = await this.initPromise;
+
+    if (kuroshiroReady && this.isReady && this.kuroshiro) {
       if (onProgressCallback) onProgressCallback('Converting lyrics to Romaji...');
       try {
         const converted = [];
@@ -204,34 +206,7 @@ const ROMAJI = {
       }
     }
 
-    // Tier 2: If text has Kanji, translate via Gemini AI
-    const hasKanji = lines.some(l => this.containsKanji(l.text));
-    if (hasKanji) {
-      if (onProgressCallback) onProgressCallback('Generating Romaji via Gemini AI...');
-      try {
-        const textLines = lines.map(l => l.text);
-        const res = await fetch('/api/gemini', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'romaji', lines: textLines })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.found && Array.isArray(data.romajiLines) && data.romajiLines.length === lines.length) {
-            return lines.map((line, idx) => ({
-              ...line,
-              romaji: data.romajiLines[idx] || this.kanaToRomaji(line.text),
-              isJapanese: true
-            }));
-          }
-        }
-      } catch (geminiErr) {
-        console.warn('Gemini Romaji API unavailable:', geminiErr);
-      }
-    }
-
-    // Tier 3: Instant client-side Kana transliteration fallback
+    // Tier 2: Instant client-side Kana transliteration fallback (0ms, 100% offline)
     if (onProgressCallback) onProgressCallback('Applying Kana Romaji transliteration...');
     return lines.map(line => {
       const isJp = this.containsJapanese(line.text);

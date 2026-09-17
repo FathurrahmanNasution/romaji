@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,8 +16,10 @@
 
   <!-- Kuroshiro & Kuromoji CDN dependencies -->
   <script src="https://cdn.jsdelivr.net/npm/kuroshiro@1.2.0/dist/kuroshiro.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/kuroshiro-analyzer-kuromoji@1.1.0/dist/kuroshiro-analyzer-kuromoji.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/kuroshiro-analyzer-kuromoji@1.1.0/dist/kuroshiro-analyzer-kuromoji.min.js"></script>
 </head>
+
 <body>
 
   <div class="app-wrapper">
@@ -34,20 +37,34 @@
     <!-- Logged Out View -->
     <main id="logged-out-view" class="card welcome-card">
       <h2>Welcome to Romaji Lyrics</h2>
-      <p>Log in with your Spotify Premium account to auto-fetch synced Japanese lyrics converted to Romaji in real-time as you listen.</p>
+      <p>Log in with your Spotify Premium account to auto-fetch synced Japanese lyrics converted to Romaji in real-time
+        as you listen.</p>
 
-      <!-- Config Notice (Shown if Client ID is missing) -->
+      <!-- Config Notice -->
       <div id="config-notice" class="config-box">
-        <p><strong>ℹ️ Spotify Setup:</strong> Enter your Spotify Client ID below or update <code>js/config.js</code>.</p>
+        <p><strong>ℹ️ Spotify Setup & Authorization:</strong></p>
+        <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+          In your <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener"
+            style="color: #1ed760; text-decoration: underline;">Spotify Developer Dashboard</a> under your App Settings,
+          add this <strong>exact</strong> Redirect URI:
+        </p>
+        <div
+          style="background: #181818; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.4rem 0.6rem; font-family: monospace; font-size: 0.82rem; color: #1ed760; margin-bottom: 0.75rem; word-break: break-all; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+          <code id="display-redirect-uri">http://localhost:8080/</code>
+          <button id="copy-redirect-uri-btn" class="btn btn-secondary"
+            style="padding: 0.15rem 0.5rem; font-size: 0.7rem; white-space: nowrap;">Copy 📋</button>
+        </div>
+
         <label for="config-client-id">Spotify Client ID:</label>
         <input type="text" id="config-client-id" placeholder="Paste Client ID here...">
-        <button id="save-config-btn" class="btn btn-primary">Save & Connect Spotify</button>
+        <button id="save-config-btn" class="btn btn-primary" style="margin-top: 0.5rem;">Save & Connect Spotify</button>
       </div>
 
       <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; margin-top: 0.5rem;">
         <button id="login-btn" class="btn btn-primary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.12-.779-.18-.899-.54-.12-.42.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141 C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38C8.82 5.94 15.84 6.18 20.28 8.821c.54.3.72 1.02.42 1.56-.3.48-1.02.72-1.62.36z"/>
+            <path
+              d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.12-.779-.18-.899-.54-.12-.42.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141 C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38C8.82 5.94 15.84 6.18 20.28 8.821c.54.3.72 1.02.42 1.56-.3.48-1.02.72-1.62.36z" />
           </svg>
           Log in with Spotify
         </button>
@@ -57,11 +74,12 @@
 
     <!-- Logged In / Player View -->
     <main id="logged-in-view" class="hidden" style="display: flex; flex-direction: column; gap: 1rem;">
-      
+
       <!-- Currently Playing Player Card -->
       <section class="card player-card">
         <div class="player-main">
-          <img id="album-art" class="album-cover" src="https://via.placeholder.com/300/282828/FFFFFF?text=Spotify" alt="Album Cover">
+          <img id="album-art" class="album-cover" src="https://via.placeholder.com/300/282828/FFFFFF?text=Spotify"
+            alt="Album Cover">
           <div class="track-info">
             <div id="track-title" class="track-title">Loading track...</div>
             <div id="track-artist" class="track-artist">Connecting...</div>
@@ -88,9 +106,25 @@
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-          <button id="toggle-paste-btn" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">📝 Paste Lyrics</button>
-          <span id="sync-badge" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 12px; background: #2a2a2a; color: var(--text-secondary); font-weight: 600;">Karaoke</span>
-          
+          <!-- Sync Offset Timing Adjuster -->
+          <div
+            style="display: flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; background: #181818; padding: 0.2rem 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
+            <span style="color: var(--text-secondary); font-size: 0.72rem;">⏱️ Offset:</span>
+            <button id="offset-minus-btn" class="btn btn-secondary"
+              style="padding: 0.1rem 0.4rem; font-size: 0.7rem; line-height: 1;"
+              title="Delay lyrics by 0.5 sec">-0.5s</button>
+            <span id="offset-val-display"
+              style="font-family: monospace; font-size: 0.75rem; min-width: 2.6rem; text-align: center; color: var(--accent-green); font-weight: 600;">0.0s</span>
+            <button id="offset-plus-btn" class="btn btn-secondary"
+              style="padding: 0.1rem 0.4rem; font-size: 0.7rem; line-height: 1;"
+              title="Advance lyrics by 0.5 sec">+0.5s</button>
+          </div>
+
+          <button id="toggle-paste-btn" class="btn btn-secondary"
+            style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">📝 Paste Lyrics</button>
+          <span id="sync-badge"
+            style="font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 12px; background: #2a2a2a; color: var(--text-secondary); font-weight: 600;">Karaoke</span>
+
           <label class="toggle-label">
             <input type="checkbox" id="autoscroll-toggle" checked>
             Auto-scroll
@@ -99,14 +133,19 @@
       </section>
 
       <!-- Collapsible Quick Paste Section -->
-      <section id="manual-paste-section" class="card hidden" style="padding: 1rem; border: 1px dashed var(--accent-green); margin-bottom: 0.25rem;">
-        <label style="font-size: 0.82rem; color: var(--accent-green); display: block; margin-bottom: 0.4rem; font-weight: 600;">
+      <section id="manual-paste-section" class="card hidden"
+        style="padding: 1rem; border: 1px dashed var(--accent-green); margin-bottom: 0.25rem;">
+        <label
+          style="font-size: 0.82rem; color: var(--accent-green); display: block; margin-bottom: 0.4rem; font-weight: 600;">
           📝 Paste Japanese lyrics or .LRC format for the current track:
         </label>
-        <textarea id="manual-lyrics-input" rows="5" placeholder="Paste lyrics from Google or .LRC format here..." style="width: 100%; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; font-family: inherit; font-size: 0.85rem; resize: vertical; margin-bottom: 0.5rem;"></textarea>
+        <textarea id="manual-lyrics-input" rows="5" placeholder="Paste lyrics from Google or .LRC format here..."
+          style="width: 100%; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; font-family: inherit; font-size: 0.85rem; resize: vertical; margin-bottom: 0.5rem;"></textarea>
         <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-          <button id="cancel-manual-paste-btn" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Cancel</button>
-          <button id="submit-manual-paste-btn" class="btn btn-primary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Convert & Save Romaji ✨</button>
+          <button id="cancel-manual-paste-btn" class="btn btn-secondary"
+            style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Cancel</button>
+          <button id="submit-manual-paste-btn" class="btn btn-primary"
+            style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Convert & Save Romaji ✨</button>
         </div>
       </section>
 
@@ -131,4 +170,5 @@
   <script src="js/neon.js?v=9"></script>
   <script src="js/app.js?v=9"></script>
 </body>
+
 </html>

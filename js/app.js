@@ -14,6 +14,7 @@ const APP = {
   isDemoMode: false,
   currentProgressMs: 0,
   trackDurationMs: 0,
+  syncOffsetMs: 0,
   isPlaying: false,
 
   // User scroll & interaction flags to prevent scroll jumping/freezing
@@ -54,13 +55,20 @@ const APP = {
 [01:00.50] また好きにさせる`,
 
   async init() {
+    this.flushLocalStorageLyrics();
     this.setupEventListeners();
 
     // Check if configuration requires setup
     const isConfigured = CONFIG.CLIENT_ID && !CONFIG.CLIENT_ID.includes('PASTE_SPOTIFY_CLIENT_ID');
     
+    let authError = null;
+    if (window.location.search.includes('error=')) {
+      const urlParams = new URLSearchParams(window.location.search);
+      authError = urlParams.get('error');
+    }
+
     // Check if returning from Spotify Auth
-    const isCallback = window.location.search.includes('code=') || window.location.search.includes('error=');
+    const isCallback = window.location.search.includes('code=') || !!authError;
     if (isCallback && isConfigured) {
       this.updateStatus('Authenticating with Spotify...');
       const success = await AUTH.handleCallback();
@@ -73,7 +81,15 @@ const APP = {
       this.showAuthenticatedState();
       this.startPolling();
     } else {
-      this.showLoggedOutState(!isConfigured);
+      this.showLoggedOutState(!isConfigured || !!authError);
+      if (authError) {
+        const notice = document.getElementById('config-notice');
+        if (notice) {
+          notice.classList.remove('hidden');
+          notice.style.border = '1px solid #ff4d4d';
+          notice.style.background = '#2a1212';
+        }
+      }
     }
   },
 
@@ -83,13 +99,49 @@ const APP = {
     document.getElementById('logout-btn')?.addEventListener('click', () => AUTH.logout());
     document.getElementById('demo-btn')?.addEventListener('click', () => this.startDemoMode());
 
-    // Config Modal / Banner
+    // Config Modal / Banner & Redirect URI copy
+    const redirectCode = document.getElementById('display-redirect-uri');
+    if (redirectCode && typeof CONFIG !== 'undefined') {
+      redirectCode.textContent = CONFIG.REDIRECT_URI;
+    }
+
+    document.getElementById('copy-redirect-uri-btn')?.addEventListener('click', () => {
+      const uri = CONFIG.REDIRECT_URI;
+      navigator.clipboard.writeText(uri).then(() => {
+        const btn = document.getElementById('copy-redirect-uri-btn');
+        if (btn) {
+          btn.textContent = 'Copied! ✅';
+          setTimeout(() => { btn.textContent = 'Copy 📋'; }, 2000);
+        }
+      });
+    });
+
     document.getElementById('save-config-btn')?.addEventListener('click', () => {
       const clientIdInput = document.getElementById('config-client-id').value.trim();
       if (clientIdInput) {
         CONFIG.CLIENT_ID = clientIdInput;
         AUTH.login();
       }
+    });
+
+    // Sync Timing Offset Adjustment Controls (-0.5s / +0.5s)
+    const updateOffsetUI = () => {
+      const display = document.getElementById('offset-val-display');
+      if (display) {
+        const sec = (this.syncOffsetMs / 1000).toFixed(1);
+        display.textContent = `${sec > 0 ? '+' : ''}${sec}s`;
+      }
+      this.syncActiveLyricLine();
+    };
+
+    document.getElementById('offset-minus-btn')?.addEventListener('click', () => {
+      this.syncOffsetMs -= 500;
+      updateOffsetUI();
+    });
+
+    document.getElementById('offset-plus-btn')?.addEventListener('click', () => {
+      this.syncOffsetMs += 500;
+      updateOffsetUI();
     });
 
     // View Mode Controls
@@ -214,10 +266,9 @@ const APP = {
     this.isPlaying = data.isPlaying;
     this.currentTrackData = data;
     
-    // Compensate for Spotify API network latency (time elapsed between Spotify snapshot and client receive)
-    const latency = data.timestamp ? Math.max(0, Date.now() - data.timestamp) : 0;
-    this.currentProgressMs = data.progressMs + latency;
-    this.trackDurationMs = data.durationMs;
+    // Use Spotify's exact playback position
+    this.currentProgressMs = data.progressMs || 0;
+    this.trackDurationMs = data.durationMs || 0;
 
     // Update Player UI Metadata
     document.getElementById('track-title').textContent = data.title;
@@ -271,22 +322,6 @@ const APP = {
   },
 
   async loadLyricsForTrack(trackData) {
-    // 0. Check if user previously saved custom lyrics locally
-    try {
-      const savedCustom = localStorage.getItem(`custom_lyrics_${trackData.id}`) ||
-                          localStorage.getItem(`custom_lyrics_${encodeURIComponent(trackData.title)}`);
-      if (savedCustom) {
-        const parsed = JSON.parse(savedCustom);
-        if (parsed && parsed.lines && parsed.lines.length > 0) {
-          this.currentLyrics = parsed;
-          this.renderLyrics();
-          this.syncActiveLyricLine();
-          this.updateStatus('Loaded saved lyrics!');
-          return;
-        }
-      }
-    } catch (e) {}
-
     // 1. Check Neon Cloud Database (Cloud Sync across all your devices!)
     if (typeof NEON !== 'undefined') {
       try {
@@ -317,8 +352,7 @@ const APP = {
     }
 
     if (!lyricResult.found || !lyricResult.lines || lyricResult.lines.length === 0) {
-      console.log('LRCLIB lyrics not found, attempting Gemini AI search...');
-      this.executeGeminiSearch(trackData);
+      this.renderLyricsError('Lyrics not found in database', trackData);
       return;
     }
 
@@ -390,9 +424,6 @@ const APP = {
           <a href="${googleSearchUrl}" target="_blank" rel="noopener" class="btn btn-secondary" style="text-decoration: none;">
             🔍 Search Plain Lyrics
           </a>
-          <button id="gemini-search-btn" class="btn btn-secondary">
-            ✨ Gemini
-          </button>
         </div>
 
         <!-- Quick Paste Lyrics Box -->
@@ -405,11 +436,6 @@ const APP = {
         </div>
       </div>
     `;
-
-    // Gemini Retry
-    document.getElementById('gemini-search-btn')?.addEventListener('click', () => {
-      this.executeGeminiSearch(trackData);
-    });
 
     // Submit Custom Lyrics & Save permanently
     document.getElementById('submit-custom-lyrics')?.addEventListener('click', async () => {
@@ -460,12 +486,9 @@ const APP = {
       this.syncActiveLyricLine();
     }
 
-    // 3. Save permanently in localStorage & Neon Cloud Database
+    // 3. Save permanently ONLY to Neon Cloud Database
     const t = trackData || this.currentTrackData;
     if (t && (t.id || t.title)) {
-      if (t.id) localStorage.setItem(`custom_lyrics_${t.id}`, JSON.stringify(this.currentLyrics));
-      if (t.title) localStorage.setItem(`custom_lyrics_${encodeURIComponent(t.title)}`, JSON.stringify(this.currentLyrics));
-      
       if (typeof NEON !== 'undefined') {
         NEON.saveLyrics(t.id, t.title, t.artist, this.currentLyrics);
       }
@@ -474,28 +497,20 @@ const APP = {
     this.updateStatus('Lyrics converted to Romaji & saved! ✨');
   },
 
-  async executeGeminiSearch(trackData, apiKey) {
-    if (!trackData) return;
-    this.renderLyricsLoading(`Searching lyrics & Romaji for "${trackData.title}" using Gemini AI...`);
-    
-    const result = await GEMINI.fetchLyrics(trackData.title, trackData.artist, apiKey);
-
-    if (result.found && result.lines && result.lines.length > 0) {
-      this.currentLyrics = {
-        isSynced: false,
-        lines: result.lines
-      };
-      
-      // Save to Neon Cloud Database
-      if (typeof NEON !== 'undefined' && trackData && trackData.id) {
-        NEON.saveLyrics(trackData.id, trackData.title, trackData.artist, this.currentLyrics);
+  flushLocalStorageLyrics() {
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('custom_lyrics_')) {
+          keysToRemove.push(key);
+        }
       }
-
-      this.renderLyrics();
-      this.updateStatus('Lyrics found via Gemini AI!');
-    } else {
-      this.renderLyricsError(result.message || 'Gemini AI could not find lyrics for this song.', trackData);
-    }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      if (keysToRemove.length > 0) {
+        console.log(`🧹 Flushed ${keysToRemove.length} cached lyrics from localStorage`);
+      }
+    } catch (e) {}
   },
 
   renderIdleState(message) {
@@ -513,11 +528,25 @@ const APP = {
     }
   },
 
+  setAutoscroll(enabled) {
+    this.autoScroll = enabled;
+    const scrollToggle = document.getElementById('autoscroll-toggle');
+    if (scrollToggle) scrollToggle.checked = enabled;
+  },
+
   renderLyrics() {
     const container = document.getElementById('lyrics-container');
     if (!container || !this.currentLyrics) return;
 
     const { lines, isSynced } = this.currentLyrics;
+
+    // Automatically set Auto-scroll based on whether lyrics are synced from database or pasted plain text
+    if (isSynced) {
+      this.setAutoscroll(true);
+    } else {
+      this.setAutoscroll(false);
+    }
+
     container.innerHTML = '';
 
     // Update sync badge in controls bar
@@ -598,38 +627,20 @@ const APP = {
   syncActiveLyricLine() {
     if (!this.currentLyrics || !this.currentLyrics.lines || this.currentLyrics.lines.length === 0) return;
 
+    // Auto lyric match & highlight is only enabled for synced database lyrics
+    if (!this.currentLyrics.isSynced) return;
+
     const lines = this.currentLyrics.lines;
-    const progress = this.currentProgressMs;
-    const duration = this.trackDurationMs || 1;
+    const progress = this.currentProgressMs + (this.syncOffsetMs || 0);
 
     let newActiveIndex = -1;
 
-    if (this.currentLyrics.isSynced) {
-      // 1. Exact timestamp matching for LRC synced lyrics
-      for (let i = 0; i < lines.length; i++) {
-        if (progress >= lines[i].timeMs) {
-          newActiveIndex = i;
-        } else {
-          break;
-        }
-      }
-    } else {
-      // 2. Unsynced plain lyrics: if user recently clicked or scrolled, don't interrupt!
-      if (this.isUserInteracting) return;
-
-      const startMs = duration * 0.04;
-      const endMs = duration * 0.96;
-      
-      if (progress < startMs) {
-        newActiveIndex = 0;
-      } else if (progress >= endMs) {
-        newActiveIndex = lines.length - 1;
+    // Exact timestamp matching for LRC synced lyrics from database
+    for (let i = 0; i < lines.length; i++) {
+      if (progress >= lines[i].timeMs) {
+        newActiveIndex = i;
       } else {
-        const effectiveRatio = (progress - startMs) / (endMs - startMs);
-        newActiveIndex = Math.min(
-          lines.length - 1,
-          Math.max(0, Math.floor(effectiveRatio * lines.length))
-        );
+        break;
       }
     }
 

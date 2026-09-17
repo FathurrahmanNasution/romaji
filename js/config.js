@@ -4,10 +4,9 @@ const CONFIG = {
   // Public Spotify Client ID (Safe in frontend for OAuth PKCE flow)
   CLIENT_ID: "c87036a104344b4ab73cbad19964df75",
 
-  // Optional client-side fallback keys (left blank for security, handled by /api/ endpoints on Vercel)
-  GEMINI_API_KEY: "",
-  NEON_CONN_STRING: "",
-  NEON_ENDPOINT: "",
+  // Neon Cloud Database Connection
+  NEON_CONN_STRING: "postgresql://neondb_owner:npg_mfxoTXrF08Be@ep-muddy-glade-b3itscs5-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+  NEON_ENDPOINT: "https://ep-muddy-glade-b3itscs5.c-4.ap-southeast-1.aws.neon.tech/sql",
 
   // Redirect URI automatically detects whether you are running locally or on Vercel
   REDIRECT_URI: (window.location.origin + window.location.pathname).replace(/\/index\.html$/, '/'),

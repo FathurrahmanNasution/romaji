@@ -7,7 +7,10 @@ const NEON = {
   async getLyrics(trackId, trackTitle) {
     try {
       const apiUrl = `/api/lyrics?trackId=${encodeURIComponent(trackId || '')}&trackTitle=${encodeURIComponent(trackTitle || '')}`;
-      const apiRes = await fetch(apiUrl);
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 5000);
+      const apiRes = await fetch(apiUrl, { signal: ctrl.signal });
+      clearTimeout(tid);
       if (apiRes.ok) {
         const data = await apiRes.json();
         if (data.found && data.lyrics) {
@@ -60,11 +63,15 @@ const NEON = {
   // Save lyrics: tries secure /api/lyrics first, falls back to direct endpoint
   async saveLyrics(trackId, trackTitle, artistName, lyricsData) {
     try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 5000);
       const apiRes = await fetch('/api/lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackId, trackTitle, artistName, lyricsData })
+        body: JSON.stringify({ trackId, trackTitle, artistName, lyricsData }),
+        signal: ctrl.signal
       });
+      clearTimeout(tid);
 
       if (apiRes.ok) {
         console.log('💾 Saved to Neon DB via /api/lyrics:', trackTitle);
