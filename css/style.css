@@ -337,6 +337,27 @@ h1 {
   color: #8cc4ff;
 }
 
+.lyrics-source {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.lyrics-source-fix {
+  background: none;
+  border: none;
+  color: var(--accent-green);
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
 /* Toast */
 .toast {
   position: fixed;

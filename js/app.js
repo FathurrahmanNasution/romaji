@@ -551,6 +551,7 @@ const APP = {
     // Render original lyrics immediately so user sees lyrics right away
     this.setLyrics({
       isSynced: lyricResult.isSynced,
+      source: lyricResult.source,
       lines: lyricResult.lines.map(l => ({
         ...l,
         romaji: null,
@@ -580,6 +581,16 @@ const APP = {
         this.updateStatus('Lyrics ready (Romaji unavailable)');
       }
     }
+
+    // Cache in Neon so next time this song loads instantly (no LRCLIB/QQ lookup, no romaji wait)
+    if (!isStale()) this.cacheCurrentLyrics();
+  },
+
+  cacheCurrentLyrics() {
+    const t = this.currentTrackData;
+    if (this.isDemoMode || !t || !t.id || !this.currentLyrics || typeof NEON === 'undefined') return;
+    NEON.saveLyrics(t.id, t.title, t.primaryArtist || t.artist, this.currentLyrics)
+      .catch(e => console.warn('Neon save error (non-fatal):', e));
   },
 
   // Replace the current lyrics. isNewTrack resets auto-scroll to a sensible default.
@@ -640,11 +651,7 @@ const APP = {
       this.updateStatus('Translation ready! 🌐');
 
       // Cache translations (plus romaji) in Neon so the next load is instant
-      const t = this.currentTrackData;
-      if (!this.isDemoMode && t && t.id && typeof NEON !== 'undefined') {
-        NEON.saveLyrics(t.id, t.title, t.primaryArtist || t.artist, lyrics)
-          .catch(e => console.warn('Neon save error (non-fatal):', e));
-      }
+      this.cacheCurrentLyrics();
     } catch (err) {
       console.warn('Translation failed:', err);
       if (token === this.lyricsLoadToken) this.showToast('English translation failed. Try again in a moment.');
@@ -679,7 +686,7 @@ const APP = {
       <div class="lyrics-message" style="gap: 0.85rem; max-width: 540px; margin: 0 auto; text-align: center;">
         <div>
           <p class="error-text" style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.25rem;">ℹ️ Lyrics not in database</p>
-          <p style="font-size: 0.85rem; color: var(--text-secondary);">This song is not in LRCLIB yet. You can find synced .lrc or paste Japanese lyrics below.</p>
+          <p style="font-size: 0.85rem; color: var(--text-secondary);">Not found in LRCLIB or QQ Music. You can find synced .lrc or paste Japanese lyrics below.</p>
         </div>
 
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;">
@@ -728,6 +735,7 @@ const APP = {
     // 1. Render immediately with instant Kana preview
     this.setLyrics({
       isSynced: parsed.isSynced,
+      source: { provider: 'Manual paste' },
       lines: parsed.lines.map(l => ({
         ...l,
         romaji: ROMAJI.containsJapanese(l.text) ? ROMAJI.kanaToRomaji(l.text) : null,
@@ -825,6 +833,25 @@ const APP = {
 
     const list = document.createElement('div');
     list.className = `lyrics-list ${isSynced ? 'synced' : 'plain'}`;
+
+    const source = this.currentLyrics.source;
+    if (source && source.provider) {
+      const label = document.createElement('div');
+      label.className = 'lyrics-source';
+      const detail = source.track ? ` · ${source.track}${source.artist ? ' — ' + source.artist : ''}` : '';
+      label.textContent = `Lyrics: ${source.provider}${detail}`;
+      const wrong = document.createElement('button');
+      wrong.className = 'lyrics-source-fix';
+      wrong.textContent = 'Wrong lyrics?';
+      wrong.title = 'Paste the correct lyrics for this track';
+      wrong.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.getElementById('manual-paste-section')?.classList.remove('hidden');
+        document.getElementById('manual-lyrics-input')?.focus();
+      });
+      label.appendChild(wrong);
+      list.appendChild(label);
+    }
 
     lines.forEach((line, index) => {
       const lineEl = document.createElement('div');

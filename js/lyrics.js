@@ -1,72 +1,170 @@
 /**
- * LRCLIB Lyrics Fetcher and LRC Parser
+ * Lyrics Fetcher (LRCLIB + QQ Music fallback) and LRC Parser
+ *
+ * Vocaloid / utaite songs are often stored on LRCLIB under a different artist
+ * (the original producer, a Project Sekai unit, a romanized name...). So besides
+ * title+artist queries we also search by title alone and pick the best candidate
+ * by normalized title, duration and artist similarity.
  */
 
 const LYRICS = {
+  // ---------- matching helpers ----------
+
+  // Strip "feat." credits, bracketed notes ("(Rumor)", "【MV】", "(feat. GUMI)") and " - Remaster" suffixes
+  cleanTitle(title) {
+    return (title || '')
+      .normalize('NFKC')
+      .replace(/\s*[\(\[\{【（][^\)\]\}】）]*[\)\]\}】）]/g, ' ')
+      .replace(/\s+(?:feat\.|ft\.|feat\s|ft\s|with\s).*$/i, '')
+      .replace(/\s+-\s+.*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim() || (title || '').trim();
+  },
+
+  // Comparison key: NFKC, lowercase, no spaces/punctuation
+  normKey(str) {
+    return (str || '')
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[\s\p{P}\p{S}]+/gu, '');
+  },
+
+  // allowPrefix: also accept "ルーマー" vs "ルーマーrumor" style decorations. Only safe when the
+  // artist matches too — otherwise "MIRROR" would match an unrelated "Mirror Mirror".
+  titleMatches(candidateTitle, wantedTitle, allowPrefix = false) {
+    const a = this.normKey(this.cleanTitle(candidateTitle));
+    const b = this.normKey(this.cleanTitle(wantedTitle));
+    if (!a || !b) return false;
+    if (a === b) return true;
+    return allowPrefix && Math.min(a.length, b.length) >= 3 && (a.startsWith(b) || b.startsWith(a));
+  },
+
+  // Alternate versions we shouldn't substitute for the original (unless that's what's playing)
+  VERSION_RE: /instrumental|\binst\b|off ?vocal|karaoke|カラオケ|remix|english ver|eng\.? ver|\blive\b|acoustic|nightcore|sped up|slowed/i,
+
+  hasJapanese(text) {
+    return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(text || '');
+  },
+
+  artistMatches(candidateArtist, wantedArtists) {
+    const cand = this.normKey(candidateArtist);
+    if (!cand) return false;
+    return wantedArtists.some(a => {
+      const k = this.normKey(a);
+      return k.length >= 2 && (cand.includes(k) || k.includes(cand));
+    });
+  },
+
+  /**
+   * Score a candidate. Returns null if it shouldn't be used at all.
+   * Same artist: allow up to 20s duration difference (different masters/edits).
+   * Different artist (cover / other release): require a close duration so we don't
+   * grab an unrelated song that happens to share the title.
+   */
+  scoreCandidate(c, wanted) {
+    if (!c || !(c.syncedLyrics || c.plainLyrics)) return null;
+    if (c.instrumental) return null;
+    const candTitle = c.trackName || c.name || '';
+    if (this.VERSION_RE.test(candTitle) && !this.VERSION_RE.test(wanted.title)) return null;
+
+    const artistOk = this.artistMatches(c.artistName, wanted.artists);
+    if (!this.titleMatches(candTitle, wanted.title, artistOk)) return null;
+    // A different artist with the same title is only plausible as a cover of a Japanese song
+    if (!artistOk && !this.hasJapanese(c.syncedLyrics || c.plainLyrics)) return null;
+
+    const hasDuration = wanted.durationSec > 0 && c.duration > 0;
+    const diff = hasDuration ? Math.abs(c.duration - wanted.durationSec) : (artistOk ? 0 : 999);
+
+    if (artistOk ? diff > 20 : diff > 6) return null;
+
+    let score = 0;
+    if (c.syncedLyrics) score += 100;
+    if (artistOk) score += 40;
+    score -= diff * 4;
+    return { candidate: c, score, diff, artistOk };
+  },
+
+  async lrclibQuery(path) {
+    try {
+      const res = await fetch(`https://lrclib.net${path}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data ? [data] : []);
+    } catch (e) {
+      return [];
+    }
+  },
+
+  // ---------- main entry ----------
+
   async fetchLyrics(trackName, artistName, durationMs) {
     const durationSec = Math.round((durationMs || 0) / 1000);
-    
-    // Clean track title (remove feat., remaster tags, live tags, etc.)
-    const cleanTrack = trackName
-      .replace(/\s*[\(\[\{]feat\..*?[\)\]\}]/gi, '')
-      .replace(/\s*[\(\[\{]with.*?[\)\]\}]/gi, '')
-      .replace(/\s*-.*?(remaster|live|mix|edit).*/gi, '')
-      .trim();
+    const artists = (artistName || '').split(/\s*,\s*/).filter(Boolean);
+    const primaryArtist = (artists[0] || '').split(/\bfeat\b|\bft\b|&/i)[0].trim();
+    const cleanTrack = this.cleanTitle(trackName);
+    const wanted = { title: trackName, artists, durationSec };
 
-    // Primary artist (first artist before comma, feat, etc.)
-    const primaryArtist = (artistName || '')
-      .split(/,|\bfeat\b|\bft\b|&/i)[0]
-      .trim();
-
-    const queryAttempts = [
-      // 1. Exact track & full artist name
-      `https://lrclib.net/api/get?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}&duration=${durationSec}`,
-      // 2. Clean track & primary artist name
-      `https://lrclib.net/api/get?track_name=${encodeURIComponent(cleanTrack)}&artist_name=${encodeURIComponent(primaryArtist)}&duration=${durationSec}`,
-      // 3. Search by clean track & primary artist
-      `https://lrclib.net/api/search?track_name=${encodeURIComponent(cleanTrack)}&artist_name=${encodeURIComponent(primaryArtist)}`,
-      // 4. Free text query search
-      `https://lrclib.net/api/search?q=${encodeURIComponent(cleanTrack + ' ' + primaryArtist)}`
+    const enc = encodeURIComponent;
+    const queries = [
+      `/api/get?track_name=${enc(trackName)}&artist_name=${enc(primaryArtist)}&duration=${durationSec}`,
+      `/api/search?track_name=${enc(cleanTrack)}&artist_name=${enc(primaryArtist)}`,
+      // Title only: finds originals for covers and songs filed under another artist name
+      `/api/search?track_name=${enc(cleanTrack)}`,
+      `/api/search?q=${enc(cleanTrack + ' ' + primaryArtist)}`
     ];
 
-    for (let i = 0; i < queryAttempts.length; i++) {
-      try {
-        const url = queryAttempts[i];
-        const response = await fetch(url);
+    const seen = new Set();
+    let best = null;
 
-        if (!response.ok) continue;
+    for (const path of queries) {
+      const results = await this.lrclibQuery(path);
+      for (const c of results) {
+        if (c.id && seen.has(c.id)) continue;
+        if (c.id) seen.add(c.id);
+        const scored = this.scoreCandidate(c, wanted);
+        if (scored && (!best || scored.score > best.score)) best = scored;
+      }
+      // Good enough: synced and timing within 3s — stop querying (be nice to LRCLIB)
+      if (best && best.candidate.syncedLyrics && best.diff <= 3) break;
+    }
 
-        const data = await response.json();
-
-        if (Array.isArray(data)) {
-          if (data.length > 0) {
-            // Find closest duration match within 15 seconds
-            let bestMatch = null;
-            let minDiff = 999;
-
-            for (const item of data) {
-              const diff = Math.abs((item.duration || 0) - durationSec);
-              if (diff < minDiff) {
-                minDiff = diff;
-                bestMatch = item;
-              }
-            }
-
-            if (bestMatch && minDiff <= 20) {
-              const processed = this.processLyricData(bestMatch);
-              if (processed.found) return processed;
-            }
-          }
-        } else if (data && (data.syncedLyrics || data.plainLyrics)) {
-          const processed = this.processLyricData(data);
-          if (processed.found) return processed;
-        }
-      } catch (err) {
-        console.warn(`Lyric query attempt ${i + 1} failed:`, err);
+    if (best) {
+      const processed = this.processLyricData(best.candidate);
+      if (processed.found) {
+        processed.source = {
+          provider: 'LRCLIB',
+          track: best.candidate.trackName,
+          artist: best.candidate.artistName
+        };
+        return processed;
       }
     }
 
-    return { found: false, message: 'Lyrics not found in LRCLIB database' };
+    // Fallback: QQ Music via our serverless proxy (has many Vocaloid / VTuber / utaite songs)
+    const qq = await this.fetchFromQQ(trackName, artistName, durationSec);
+    if (qq) return qq;
+
+    return { found: false, message: 'Lyrics not found in LRCLIB or QQ Music' };
+  },
+
+  async fetchFromQQ(trackName, artistName, durationSec) {
+    try {
+      const params = new URLSearchParams({ title: trackName, artist: artistName || '', duration: String(durationSec || 0) });
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(`/api/qqlyrics?${params}`, { signal: ctrl.signal });
+      clearTimeout(tid);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || !data.found) return null;
+
+      const processed = this.processLyricData(data);
+      if (!processed.found) return null;
+      processed.source = { provider: 'QQ Music', track: data.trackName, artist: data.artistName };
+      return processed;
+    } catch (e) {
+      return null; // /api not available locally, or QQ unreachable
+    }
   },
 
   processLyricData(data) {
@@ -83,7 +181,7 @@ const LYRICS = {
         };
       }
     }
-    
+
     if (data.plainLyrics) {
       const lines = data.plainLyrics
         .split('\n')
@@ -110,7 +208,7 @@ const LYRICS = {
   // Parse LRC text into array of { timeMs, text }
   parseLRC(lrcText) {
     if (!lrcText) return [];
-    
+
     const lines = lrcText.split('\n');
     const result = [];
     // Matches [mm:ss.xx] or [mm:ss.xxx]
@@ -160,7 +258,7 @@ const LYRICS = {
         .map(t => t.trim())
         .filter(t => t.length > 0)
         .map(t => ({ timeMs: null, text: t }));
-      
+
       return {
         found: true,
         isSynced: false,
