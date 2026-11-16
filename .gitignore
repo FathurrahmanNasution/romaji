@@ -13,3 +13,4 @@ scratch/
 *.md
 .vercel
 .env*
+.claude

@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- CSS -->
-  <link rel="stylesheet" href="css/style.css?v=2">
+  <link rel="stylesheet" href="css/style.css?v=3">
 
   <!-- Romaji conversion is handled client-side via built-in kana transliterator (romaji.js) -->
 </head>
@@ -75,7 +75,7 @@
       <!-- Currently Playing Player Card -->
       <section class="card player-card">
         <div class="player-main">
-          <img id="album-art" class="album-cover" src="https://via.placeholder.com/300/282828/FFFFFF?text=Spotify"
+          <img id="album-art" class="album-cover" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23282828'/%3E%3C/svg%3E"
             alt="Album Cover">
           <div class="track-info">
             <div id="track-title" class="track-title">Loading track...</div>
@@ -84,13 +84,32 @@
         </div>
 
         <div class="progress-container">
-          <div class="progress-bar-outer">
+          <div id="progress-bar-outer" class="progress-bar-outer" title="Click to seek">
             <div id="progress-bar-inner" class="progress-bar-inner"></div>
           </div>
           <div class="time-stamps">
             <span id="time-current">0:00</span>
             <span id="time-duration">0:00</span>
           </div>
+        </div>
+
+        <!-- Playback Controls (Spotify Premium) -->
+        <div class="playback-controls" role="group" aria-label="Playback controls">
+          <button id="ctrl-prev" class="ctrl-btn" title="Previous track" aria-label="Previous track">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 5h2v14H6zM9.5 12 19 19V5z"/></svg>
+          </button>
+          <button id="ctrl-back" class="ctrl-btn" title="Back 10s (←: 5s)" aria-label="Rewind 10 seconds">
+            <span class="ctrl-label">-10</span>
+          </button>
+          <button id="ctrl-play" class="ctrl-btn ctrl-play" title="Play / Pause (Space)" aria-label="Play">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button id="ctrl-fwd" class="ctrl-btn" title="Forward 10s (→: 5s)" aria-label="Forward 10 seconds">
+            <span class="ctrl-label">+10</span>
+          </button>
+          <button id="ctrl-next" class="ctrl-btn" title="Next track" aria-label="Next track">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16 5h2v14h-2zM14.5 12 5 19V5z"/></svg>
+          </button>
         </div>
       </section>
 
@@ -101,6 +120,8 @@
           <button class="mode-btn" data-mode="romaji">Romaji</button>
           <button class="mode-btn active" data-mode="both">Both</button>
         </div>
+
+        <button id="translate-btn" class="translate-btn" aria-pressed="false" title="Show English translation">🌐 English</button>
 
         <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
           <!-- Sync Offset Timing Adjuster -->
@@ -157,14 +178,18 @@
     </main>
   </div>
 
-  <!-- Application Logic Scripts (v12: fast multi-tier Romaji engine & smooth scroll/click) -->
-  <script src="js/config.js?v=17"></script>
-  <script src="js/auth.js?v=19"></script>
-  <script src="js/spotify.js?v=19"></script>
-  <script src="js/lyrics.js?v=19"></script>
-  <script src="js/romaji.js?v=19"></script>
-  <script src="js/neon.js?v=19"></script>
-  <script src="js/app.js?v=19"></script>
+  <!-- Toast notifications (playback errors, etc.) -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <!-- Application Logic Scripts -->
+  <script src="js/config.js?v=20"></script>
+  <script src="js/auth.js?v=20"></script>
+  <script src="js/spotify.js?v=20"></script>
+  <script src="js/lyrics.js?v=20"></script>
+  <script src="js/romaji.js?v=20"></script>
+  <script src="js/neon.js?v=20"></script>
+  <script src="js/translate.js?v=20"></script>
+  <script src="js/app.js?v=20"></script>
 </body>
 
 </html>

@@ -1,12 +1,7 @@
 /**
- * Kuroshiro + Kuromoji Japanese to Romaji Converter
- */
-
-/**
- * High-Performance Japanese to Romaji Converter
- * Tier 1: Kuroshiro + Kuromoji (local morphologic analyzer)
- * Tier 2: Serverless Gemini AI (/api/gemini) for 100% accurate Kanji readings
- * Tier 3: Built-in Instant Hepburn Kana Transliterator (0ms, 100% offline, zero dependencies)
+ * Japanese to Romaji Converter
+ * Tier 1: Kuroshiro + Kuromoji running in a Web Worker (accurate Kanji readings, off the main thread)
+ * Tier 2: Built-in Hepburn kana transliterator (instant, offline) used as fallback
  */
 
 const ROMAJI = {
@@ -122,6 +117,21 @@ const ROMAJI = {
       i++;
     }
     return result;
+  },
+
+  // Kuroshiro romanizes particles by their kana (は→"ha", へ→"he"). In spaced mode
+  // particles are separate tokens, so fix standalone ones to how they're pronounced.
+  fixParticles(romaji, originalText) {
+    if (!romaji) return romaji;
+    let out = romaji;
+    if (originalText.includes('は')) out = out.replace(/(^|\s)ha(?=\s|$|[,.!?])/g, '$1wa');
+    if (originalText.includes('へ')) out = out.replace(/(^|\s)he(?=\s|$|[,.!?])/g, '$1e');
+    // Tidy spacing: collapse runs of spaces and hug brackets/punctuation
+    return out
+      .replace(/\s+/g, ' ')
+      .replace(/([(\[「『]) /g, '$1')
+      .replace(/ ([)\]」』,.!?])/g, '$1')
+      .trim();
   },
 
   initWorker() {
@@ -263,7 +273,9 @@ const ROMAJI = {
           // If any specific line failed inside worker, apply kana fallback to that line
           return response.result.map(r => {
             if (r.isJapanese && !r.romaji) {
-               r.romaji = this.kanaToRomaji(r.text);
+              r.romaji = this.kanaToRomaji(r.text);
+            } else if (r.romaji) {
+              r.romaji = this.fixParticles(r.romaji, r.text);
             }
             return r;
           });

@@ -214,6 +214,20 @@ h1 {
   background: var(--bg-hover);
   border-radius: 3px;
   overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  transition: height 0.15s ease;
+}
+
+/* Bigger invisible hit area for tapping/clicking to seek */
+.progress-bar-outer::before {
+  content: '';
+  position: absolute;
+  inset: -8px 0;
+}
+
+.progress-bar-outer:hover {
+  height: 8px;
 }
 
 .progress-bar-inner {
@@ -228,6 +242,125 @@ h1 {
   justify-content: space-between;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+/* Playback Controls */
+.playback-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ctrl-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.ctrl-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.ctrl-btn:active {
+  transform: scale(0.92);
+}
+
+.ctrl-btn:focus-visible,
+.translate-btn:focus-visible,
+.mode-btn:focus-visible {
+  outline: 2px solid var(--accent-green);
+  outline-offset: 2px;
+}
+
+.ctrl-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctrl-play {
+  width: 48px;
+  height: 48px;
+  background: var(--text-primary);
+  color: #000;
+}
+
+.ctrl-play:hover {
+  background: var(--text-primary);
+  color: #000;
+  transform: scale(1.05);
+}
+
+/* English translation toggle */
+.translate-btn {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.translate-btn.active {
+  background: #1a2a3a;
+  border-color: #4aa3ff;
+  color: #8cc4ff;
+}
+
+.translate-btn.loading {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.line-translation {
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-style: italic;
+  color: #6f8fae;
+  margin-top: 0.2rem;
+}
+
+.lyric-line.active .line-translation {
+  color: #8cc4ff;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  max-width: min(92vw, 480px);
+  background: #2a2a2a;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+}
+
+.toast .btn {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 /* Lyrics Controls */
@@ -410,6 +543,11 @@ h1 {
     justify-content: space-between;
   }
   
+  .translate-btn {
+    width: 100%;
+    padding: 0.45rem 0;
+  }
+
   .mode-btn {
     flex: 1;
     text-align: center;

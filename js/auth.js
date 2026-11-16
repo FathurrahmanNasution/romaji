@@ -33,7 +33,7 @@ const AUTH = {
     sessionStorage.setItem('spotify_code_verifier', verifier);
 
     const challenge = await this.generateCodeChallenge(verifier);
-    const scope = 'user-read-currently-playing user-read-playback-state';
+    const scope = CONFIG.SPOTIFY_SCOPES;
 
     const params = new URLSearchParams({
       client_id: CONFIG.CLIENT_ID,
@@ -141,6 +141,9 @@ const AUTH = {
     if (data.refresh_token) {
       localStorage.setItem('spotify_refresh_token', data.refresh_token);
     }
+    if (data.scope) {
+      localStorage.setItem('spotify_granted_scope', data.scope);
+    }
     if (data.expires_in) {
       const expiresAt = Date.now() + (data.expires_in * 1000);
       localStorage.setItem('spotify_expires_at', expiresAt.toString());
@@ -162,6 +165,12 @@ const AUTH = {
     return accessToken;
   },
 
+  // True if the stored token was granted the given scope (older logins lack playback control)
+  hasScope(scope) {
+    const granted = localStorage.getItem('spotify_granted_scope') || '';
+    return granted.split(' ').includes(scope);
+  },
+
   isLoggedIn() {
     return !!localStorage.getItem('spotify_access_token');
   },
@@ -170,6 +179,7 @@ const AUTH = {
     localStorage.removeItem('spotify_access_token');
     localStorage.removeItem('spotify_refresh_token');
     localStorage.removeItem('spotify_expires_at');
+    localStorage.removeItem('spotify_granted_scope');
     sessionStorage.removeItem('spotify_code_verifier');
     window.location.reload();
   },
