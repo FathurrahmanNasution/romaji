@@ -42,8 +42,10 @@ const LYRICS = {
   // Alternate versions we shouldn't substitute for the original (unless that's what's playing)
   VERSION_RE: /instrumental|\binst\b|off ?vocal|karaoke|カラオケ|remix|english ver|eng\.? ver|\blive\b|acoustic|nightcore|sped up|slowed/i,
 
+  // Kana, not just kanji: Chinese lyrics share the Han range but never use hiragana/katakana.
+  // Require a few kana so a stray credit line can't qualify a Chinese/Korean song.
   hasJapanese(text) {
-    return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(text || '');
+    return ((text || '').match(/[\u3041-\u3096\u30a1-\u30fa]/g) || []).length >= 5;
   },
 
   artistMatches(candidateArtist, wantedArtists) {

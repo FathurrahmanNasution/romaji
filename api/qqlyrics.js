@@ -39,7 +39,8 @@ function titleMatches(a, b, allowPrefix) {
 }
 
 const VERSION_RE = /instrumental|\binst\b|off ?vocal|karaoke|カラオケ|remix|english ver|eng\.? ver|\blive\b|acoustic|nightcore|sped up|slowed|伴奏/i;
-const JP_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/;
+// Kana, not kanji: Chinese lyrics share the Han range but never use hiragana/katakana
+const hasJapanese = (text) => ((text || '').match(/[\u3041-\u3096\u30a1-\u30fa]/g) || []).length >= 5;
 
 function artistMatches(candidateArtists, wantedArtists) {
   const cands = candidateArtists.map(normKey).filter(Boolean);
@@ -58,8 +59,9 @@ function decodeEntities(s) {
 }
 
 // Remove [ti:]/[ar:] tags, credit lines and the "Title - Artist" header line
-function cleanLyrics(raw, title) {
+function cleanLyrics(raw, title, artistNames = []) {
   const titleKey = normKey(cleanTitle(title));
+  const artistKeys = artistNames.map(normKey).filter(k => k.length >= 2);
   const out = [];
   for (const line of decodeEntities(raw).replace(/\r/g, '').split('\n')) {
     if (/^\[[a-z]+:.*\]$/i.test(line.trim())) continue; // metadata tags
@@ -67,8 +69,13 @@ function cleanLyrics(raw, title) {
     const stamp = m[1].replace(/\[(\d{2}):(\d{2}):(\d{2,3})\]/g, '[$1:$2.$3]');
     const text = m[2].trim();
     if (CREDIT_RE.test(text)) continue;
+    // Leading credit block in any language ("钢琴：Kevin", "Guitar: ...") before the first lyric line
+    if (out.length === 0 && /^[^\s:：]{1,12}\s*[:：]/.test(text)) continue;
     // Header like "オーバーライド - 吉田夜世" in the first lines
     if (out.length < 3 && text.includes(' - ') && titleKey && normKey(text).startsWith(titleKey)) continue;
+    // Header like "ポリスピカデリー、羽累——ズル（狡猾）": title + an artist name in one of the first lines
+    if (out.length < 3 && titleKey && normKey(text).includes(titleKey) &&
+        artistKeys.some(k => normKey(text).includes(k))) continue;
     if (/^此歌曲为没有填词的纯音乐/.test(text) || /^纯音乐，请欣赏/.test(text)) return '';
     out.push(stamp + text);
   }
@@ -145,10 +152,12 @@ export default async function handler(req, res) {
     // Try the best few candidates until one actually has lyrics; prefer timestamped ones
     let plainFallback = null;
     for (const c of candidates.slice(0, 4)) {
-      const lyric = cleanLyrics(await fetchLyric(c.s.songmid), title);
+      // Singer names as QQ lists them (often Japanese) plus "ポリスピカデリー (Police Piccadilly)" parts
+      const names = c.singers.flatMap(n => [n, ...n.split(/[()（）]/)]).concat(artists);
+      const lyric = cleanLyrics(await fetchLyric(c.s.songmid), title, names);
       if (!lyric) continue;
       // Different artist + no Japanese text = almost certainly an unrelated same-title song
-      if (!c.artistOk && !JP_RE.test(lyric)) continue;
+      if (!c.artistOk && !hasJapanese(lyric)) continue;
       const isSynced = (lyric.match(/^\[\d{2}:\d{2}\.\d{2,3}\]/gm) || []).length >= 3;
       const result = {
         found: true,
