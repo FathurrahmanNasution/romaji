@@ -146,7 +146,75 @@ const LYRICS = {
     const qq = await this.fetchFromQQ(trackName, artistName, durationSec);
     if (qq) return qq;
 
-    return { found: false, message: 'Lyrics not found in LRCLIB or QQ Music' };
+    // Fallback: UtaiteDB / VocaDB community databases (official public API, CORS enabled).
+    // Plain lyrics only, but they cover many utaite / VTuber / Vocaloid songs nobody else has.
+    for (const site of this.VOCADB_SITES) {
+      const vdb = await this.fetchFromVocaDB(site, wanted);
+      if (vdb) return vdb;
+    }
+
+    return { found: false, message: 'Lyrics not found in LRCLIB, QQ Music, UtaiteDB or VocaDB' };
+  },
+
+  VOCADB_SITES: [
+    { name: 'UtaiteDB', base: 'https://utaitedb.net' },
+    { name: 'VocaDB', base: 'https://vocadb.net' }
+  ],
+
+  async fetchFromVocaDB(site, wanted) {
+    try {
+      const params = new URLSearchParams({
+        query: this.cleanTitle(wanted.title),
+        maxResults: '10',
+        nameMatchMode: 'Auto',
+        fields: 'Lyrics,Names,Artists',
+        lang: 'Default'
+      });
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch(`${site.base}/api/songs?${params}`, {
+        headers: { Accept: 'application/json' },
+        signal: ctrl.signal
+      });
+      clearTimeout(tid);
+      if (!res.ok) return null;
+      const data = await res.json();
+
+      let best = null;
+      for (const song of (data && data.items) || []) {
+        const original = (song.lyrics || []).find(l => l.translationType === 'Original' && l.value);
+        if (!original) continue;
+
+        // Artist names in every form the DB knows (e.g. "ｲﾄｸﾞﾙﾏ" + "Itoguruma")
+        const artistNames = [song.artistString || ''];
+        for (const a of song.artists || []) {
+          artistNames.push(a.name || '');
+          if (a.artist && a.artist.additionalNames) artistNames.push(...a.artist.additionalNames.split(/\s*,\s*/));
+        }
+        const artistOk = artistNames.some(n => this.artistMatches(n, wanted.artists));
+
+        // Spotify often uses the English/romanized title ("Lunatic Crazy" vs "ルナティッククレイジー")
+        const titles = [song.name, song.defaultName, ...((song.names || []).map(n => n.value))].filter(Boolean);
+        if (titles.some(t => this.VERSION_RE.test(t)) && !this.VERSION_RE.test(wanted.title)) continue;
+        if (!titles.some(t => this.titleMatches(t, wanted.title, artistOk))) continue;
+
+        const hasDuration = wanted.durationSec > 0 && song.lengthSeconds > 0;
+        const diff = hasDuration ? Math.abs(song.lengthSeconds - wanted.durationSec) : (artistOk ? 0 : 999);
+        if (artistOk ? diff > 20 : diff > 6) continue;
+        if (!artistOk && !this.hasJapanese(original.value)) continue;
+
+        const score = (artistOk ? 40 : 0) - diff * 4;
+        if (!best || score > best.score) best = { song, original, score };
+      }
+      if (!best) return null;
+
+      const processed = this.processLyricData({ plainLyrics: best.original.value });
+      if (!processed.found) return null;
+      processed.source = { provider: site.name, track: best.song.name, artist: best.song.artistString };
+      return processed;
+    } catch (e) {
+      return null;
+    }
   },
 
   async fetchFromQQ(trackName, artistName, durationSec) {

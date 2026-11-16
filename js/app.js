@@ -686,7 +686,7 @@ const APP = {
       <div class="lyrics-message" style="gap: 0.85rem; max-width: 540px; margin: 0 auto; text-align: center;">
         <div>
           <p class="error-text" style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.25rem;">ℹ️ Lyrics not in database</p>
-          <p style="font-size: 0.85rem; color: var(--text-secondary);">Not found in LRCLIB or QQ Music. You can find synced .lrc or paste Japanese lyrics below.</p>
+          <p style="font-size: 0.85rem; color: var(--text-secondary);">Not found in LRCLIB, QQ Music, UtaiteDB or VocaDB. You can find synced .lrc or paste Japanese lyrics below.</p>
         </div>
 
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;">
