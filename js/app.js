@@ -70,10 +70,18 @@ const APP = {
 [01:00.50] また好きにさせる`,
 
   async init() {
+    // Which player drives this page: Spotify (index.html) or YouTube (youtube.html)
+    this.source = document.body.dataset.source || 'spotify';
+
     this.flushLocalStorageLyrics();
     try { this.showTranslation = localStorage.getItem('show_translation') === '1'; } catch (e) {}
     this.setupEventListeners();
     this.updateTranslateButton();
+
+    if (this.source === 'youtube') {
+      YOUTUBE.init();
+      return;
+    }
 
     // Check if configuration requires setup
     const isConfigured = CONFIG.CLIENT_ID && !CONFIG.CLIENT_ID.includes('PASTE_SPOTIFY_CLIENT_ID');
@@ -158,7 +166,7 @@ const APP = {
 
     // Keyboard shortcuts: Space = play/pause, ←/→ = ±5s (ignored while typing)
     document.addEventListener('keydown', (e) => {
-      if (document.getElementById('logged-in-view')?.classList.contains('hidden')) return;
+      if (this.source === 'spotify' && document.getElementById('logged-in-view')?.classList.contains('hidden')) return;
       const tag = (e.target.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
       if (e.code === 'Space') { e.preventDefault(); this.controlPlayback('toggle'); }
@@ -378,6 +386,13 @@ const APP = {
 
     this.progressInterval = setInterval(() => {
       if (!this.isPlaying) return;
+      // YouTube: the embedded player knows the exact position, so read it instead of extrapolating
+      if (this.source === 'youtube') {
+        this.currentProgressMs = YOUTUBE.getCurrentTimeMs();
+        this.updateProgressUI();
+        this.syncActiveLyricLine();
+        return;
+      }
       const elapsed = Date.now() - startTime;
       this.currentProgressMs = Math.min(initialProgress + elapsed, this.trackDurationMs);
       this.updateProgressUI();
@@ -428,6 +443,12 @@ const APP = {
     if (action === 'seekTo') seekTarget = value;
     if (seekTarget !== null) {
       seekTarget = Math.min(Math.max(0, seekTarget), Math.max(0, this.trackDurationMs - 1000));
+    }
+
+    // YouTube page: drive the embedded player directly (no Premium/permissions needed)
+    if (this.source === 'youtube') {
+      YOUTUBE.control(action, seekTarget);
+      return;
     }
 
     // Demo mode: simulate locally
@@ -507,7 +528,8 @@ const APP = {
     this.syncActiveLyricLine(true);
   },
 
-  async loadLyricsForTrack(trackData) {
+  // skipCache: ignore the Neon cache (used when the user corrects the title/artist on the YouTube page)
+  async loadLyricsForTrack(trackData, { skipCache = false } = {}) {
     const token = ++this.lyricsLoadToken;
     const isStale = () => token !== this.lyricsLoadToken;
 
@@ -516,7 +538,7 @@ const APP = {
     this.renderLyricsLoading(`Fetching lyrics for "${trackData.title}"...`);
 
     // 1. Check Neon Cloud Database (shared cache across devices)
-    if (!this.isDemoMode && typeof NEON !== 'undefined') {
+    if (!this.isDemoMode && !skipCache && typeof NEON !== 'undefined') {
       try {
         const cloudLyrics = await NEON.getLyrics(trackData.id, trackData.title, trackData.primaryArtist || trackData.artist);
         if (isStale()) return;
@@ -791,7 +813,8 @@ const APP = {
 
     document.getElementById('track-title').textContent = 'Not Playing';
     document.getElementById('track-artist').textContent = 'Play a song on Spotify to see lyrics';
-    document.getElementById('album-art').src = PLACEHOLDER_ART;
+    const art = document.getElementById('album-art');
+    if (art) art.src = PLACEHOLDER_ART;
 
     const container = document.getElementById('lyrics-container');
     if (container) {

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Romaji Lyrics</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css?v=6">
+</head>
+
+<body data-source="youtube">
+
+  <div class="app-wrapper">
+    <header>
+      <div class="logo-container">
+        <span class="logo-icon">🎵</span>
+        <h1>Romaji Lyrics</h1>
+      </div>
+      <nav class="page-tabs" aria-label="Player source">
+        <a href="./" class="page-tab">🎧 Spotify</a>
+        <a href="youtube.html" class="page-tab active" aria-current="page">▶️ YouTube</a>
+      </nav>
+    </header>
+
+    <main style="display: flex; flex-direction: column; gap: 1rem;">
+
+      <!-- Paste a YouTube link -->
+      <form id="yt-load-form" class="card yt-load-form">
+        <label for="yt-url-input" class="sr-only">YouTube link, playlist link, or song title</label>
+        <input type="text" id="yt-url-input" autocomplete="off"
+          placeholder="Song title, YouTube link, or playlist link">
+        <button type="submit" class="btn btn-primary">Go</button>
+      </form>
+
+      <!-- Title search results -->
+      <div id="yt-search-results" class="card yt-search-results hidden" aria-live="polite"></div>
+
+      <p id="yt-empty-hint" class="yt-hint">
+        Type a song title, or paste a video or playlist link. Lyrics are found automatically from the
+        video title, converted to Romaji, and synced to the video.
+      </p>
+
+      <div id="yt-player-section" class="hidden" style="display: flex; flex-direction: column; gap: 1rem;">
+
+        <!-- Video + transport -->
+        <section class="card player-card">
+          <div class="yt-frame">
+            <div id="yt-player"></div>
+          </div>
+
+          <div class="track-info">
+            <div id="yt-playlist-info" class="yt-playlist-info hidden"></div>
+            <div id="track-title" class="track-title">Loading...</div>
+            <div id="track-artist" class="track-artist"></div>
+          </div>
+
+          <div class="progress-container">
+            <div id="progress-bar-outer" class="progress-bar-outer" title="Click to seek">
+              <div id="progress-bar-inner" class="progress-bar-inner"></div>
+            </div>
+            <div class="time-stamps">
+              <span id="time-current">0:00</span>
+              <span id="time-duration">0:00</span>
+            </div>
+          </div>
+
+          <div class="playback-controls" role="group" aria-label="Playback controls">
+            <button id="ctrl-prev" class="ctrl-btn hidden" title="Previous video in playlist" aria-label="Previous video">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 5h2v14H6zM9.5 12 19 19V5z"/></svg>
+            </button>
+            <button id="ctrl-back" class="ctrl-btn" title="Back 10s (←: 5s)" aria-label="Rewind 10 seconds">
+              <span class="ctrl-label">-10</span>
+            </button>
+            <button id="ctrl-play" class="ctrl-btn ctrl-play" title="Play / Pause (Space)" aria-label="Play">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button id="ctrl-fwd" class="ctrl-btn" title="Forward 10s (→: 5s)" aria-label="Forward 10 seconds">
+              <span class="ctrl-label">+10</span>
+            </button>
+            <button id="ctrl-next" class="ctrl-btn hidden" title="Next video in playlist" aria-label="Next video">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16 5h2v14h-2zM14.5 12 5 19V5z"/></svg>
+            </button>
+          </div>
+
+          <!-- Song info guessed from the video title; editable when the guess is wrong -->
+          <details class="yt-meta">
+            <summary>Wrong song? Edit title / artist</summary>
+            <p id="yt-raw-title" class="yt-raw-title"></p>
+            <form id="yt-meta-form" class="yt-meta-form">
+              <label>Title <input type="text" id="yt-title-input" autocomplete="off"></label>
+              <label>Artist <input type="text" id="yt-artist-input" autocomplete="off"></label>
+              <button type="submit" class="btn btn-primary">🔎 Search lyrics</button>
+            </form>
+          </details>
+        </section>
+
+        <!-- Lyrics Display Controls -->
+        <section class="controls-bar">
+          <div class="mode-toggle">
+            <button class="mode-btn" data-mode="original">Original</button>
+            <button class="mode-btn" data-mode="romaji">Romaji</button>
+            <button class="mode-btn active" data-mode="both">Both</button>
+          </div>
+
+          <button id="translate-btn" class="translate-btn" aria-pressed="false" title="Show English translation">🌐 English</button>
+
+          <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+            <div
+              style="display: flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; background: #181818; padding: 0.2rem 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
+              <span style="color: var(--text-secondary); font-size: 0.72rem;">⏱️ Offset:</span>
+              <button id="offset-minus-btn" class="btn btn-secondary"
+                style="padding: 0.1rem 0.4rem; font-size: 0.7rem; line-height: 1;"
+                title="Delay lyrics by 0.5 sec">-0.5s</button>
+              <span id="offset-val-display"
+                style="font-family: monospace; font-size: 0.75rem; min-width: 2.6rem; text-align: center; color: var(--accent-green); font-weight: 600;">0.0s</span>
+              <button id="offset-plus-btn" class="btn btn-secondary"
+                style="padding: 0.1rem 0.4rem; font-size: 0.7rem; line-height: 1;"
+                title="Advance lyrics by 0.5 sec">+0.5s</button>
+            </div>
+
+            <button id="toggle-paste-btn" class="btn btn-secondary"
+              style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">📝 Paste Lyrics</button>
+            <span id="sync-badge"
+              style="font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 12px; background: #2a2a2a; color: var(--text-secondary); font-weight: 600;">Karaoke</span>
+
+            <label class="toggle-label">
+              <input type="checkbox" id="autoscroll-toggle" checked>
+              Auto-scroll
+            </label>
+          </div>
+        </section>
+
+        <!-- Collapsible Quick Paste Section -->
+        <section id="manual-paste-section" class="card hidden"
+          style="padding: 1rem; border: 1px dashed var(--accent-green); margin-bottom: 0.25rem;">
+          <label for="manual-lyrics-input"
+            style="font-size: 0.82rem; color: var(--accent-green); display: block; margin-bottom: 0.4rem; font-weight: 600;">
+            📝 Paste Japanese lyrics or .LRC format for this video:
+          </label>
+          <textarea id="manual-lyrics-input" rows="5" placeholder="Paste lyrics or .LRC format here..."
+            style="width: 100%; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; font-family: inherit; font-size: 0.85rem; resize: vertical; margin-bottom: 0.5rem;"></textarea>
+          <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+            <button id="cancel-manual-paste-btn" class="btn btn-secondary"
+              style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Cancel</button>
+            <button id="submit-manual-paste-btn" class="btn btn-primary"
+              style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Convert & Save Romaji ✨</button>
+          </div>
+        </section>
+
+        <!-- Lyrics Display Box -->
+        <section id="lyrics-container" class="card lyrics-card">
+          <div class="lyrics-message">
+            <div class="spinner"></div>
+            <p id="app-status">Loading video...</p>
+          </div>
+        </section>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="js/config.js?v=25"></script>
+  <script src="js/lyrics.js?v=25"></script>
+  <script src="js/romaji.js?v=25"></script>
+  <script src="js/neon.js?v=25"></script>
+  <script src="js/translate.js?v=25"></script>
+  <script src="js/youtube.js?v=25"></script>
+  <script src="js/app.js?v=25"></script>
+</body>
+
+</html>

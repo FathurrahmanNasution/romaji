@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- CSS -->
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <link rel="stylesheet" href="css/style.css?v=6">
 
   <!-- Romaji conversion is handled client-side via built-in kana transliterator (romaji.js) -->
 </head>
@@ -24,8 +24,12 @@
     <header>
       <div class="logo-container">
         <span class="logo-icon">🎵</span>
-        <h1>Spotify Romaji Lyrics</h1>
+        <h1>Romaji Lyrics</h1>
       </div>
+      <nav class="page-tabs" aria-label="Player source">
+        <a href="./" class="page-tab active" aria-current="page">🎧 Spotify</a>
+        <a href="youtube.html" class="page-tab">▶️ YouTube</a>
+      </nav>
       <div id="header-actions">
         <button id="logout-btn" class="btn btn-secondary hidden">Logout</button>
       </div>
@@ -182,14 +186,14 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <!-- Application Logic Scripts -->
-  <script src="js/config.js?v=23"></script>
-  <script src="js/auth.js?v=23"></script>
-  <script src="js/spotify.js?v=23"></script>
-  <script src="js/lyrics.js?v=23"></script>
-  <script src="js/romaji.js?v=23"></script>
-  <script src="js/neon.js?v=23"></script>
-  <script src="js/translate.js?v=23"></script>
-  <script src="js/app.js?v=23"></script>
+  <script src="js/config.js?v=25"></script>
+  <script src="js/auth.js?v=25"></script>
+  <script src="js/spotify.js?v=25"></script>
+  <script src="js/lyrics.js?v=25"></script>
+  <script src="js/romaji.js?v=25"></script>
+  <script src="js/neon.js?v=25"></script>
+  <script src="js/translate.js?v=25"></script>
+  <script src="js/app.js?v=25"></script>
 </body>
 
 </html>
