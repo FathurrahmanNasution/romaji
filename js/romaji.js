@@ -134,16 +134,30 @@ const ROMAJI = {
       .trim();
   },
 
+  // Kuroshiro builds loaded by the worker (the Chrome extension bundles local copies of these)
+  WORKER_LIBS: [
+    'https://cdn.jsdelivr.net/npm/kuroshiro@1.2.0/dist/kuroshiro.min.js',
+    'https://cdn.jsdelivr.net/npm/kuroshiro-analyzer-kuromoji@1.1.0/dist/kuroshiro-analyzer-kuromoji.min.js'
+  ],
+
   initWorker() {
     if (this.worker) return;
-    
-    // Embed the worker code as a Blob to completely bypass Vercel path, caching, and CORS issues!
-    const workerCode = `
-      importScripts(
-        'https://cdn.jsdelivr.net/npm/kuroshiro@1.2.0/dist/kuroshiro.min.js',
-        'https://cdn.jsdelivr.net/npm/kuroshiro-analyzer-kuromoji@1.1.0/dist/kuroshiro-analyzer-kuromoji.min.js'
-      );
 
+    if (typeof self !== 'undefined' && self.ROMAJI_WORKER_URL) {
+      // Chrome extension: CSP forbids remote scripts, so it ships a prebuilt worker file
+      this.worker = new Worker(self.ROMAJI_WORKER_URL);
+    } else {
+      // Website: embed the worker as a Blob to bypass Vercel path, caching, and CORS issues
+      const imports = `importScripts(${this.WORKER_LIBS.map(u => JSON.stringify(u)).join(', ')});\n`;
+      const blob = new Blob([imports + this.workerBody()], { type: 'application/javascript' });
+      this.worker = new Worker(URL.createObjectURL(blob));
+    }
+    this.attachWorkerHandlers();
+  },
+
+  // Worker source (without the importScripts line)
+  workerBody() {
+    return `
       let kuroshiro = null;
       let isReady = false;
       let initPromise = null;
@@ -209,10 +223,9 @@ const ROMAJI = {
         }
       });
     `;
+  },
 
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    this.worker = new Worker(URL.createObjectURL(blob));
-    
+  attachWorkerHandlers() {
     this.worker.onerror = (err) => {
       console.error("Blob Worker creation failed:", err);
     };

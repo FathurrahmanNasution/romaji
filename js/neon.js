@@ -4,6 +4,9 @@
  * on the server (Vercel env var NEON_CONN_STRING) and never reach the browser.
  */
 
+// API_BASE: empty on the website (same origin); the Chrome extension points it at the Vercel deployment
+const NEON_API = ((typeof self !== 'undefined' && self.API_BASE) || '') + '/api/lyrics';
+
 const NEON = {
   async getLyrics(trackId, trackTitle, artistName) {
     try {
@@ -14,7 +17,7 @@ const NEON = {
       });
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 12000); // Vercel/Neon cold starts can be slow
-      const apiRes = await fetch(`/api/lyrics?${params}`, { signal: ctrl.signal });
+      const apiRes = await fetch(`${NEON_API}?${params}`, { signal: ctrl.signal });
       clearTimeout(tid);
       if (!apiRes.ok) return null;
 
@@ -33,7 +36,7 @@ const NEON = {
     try {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 12000);
-      const apiRes = await fetch('/api/lyrics', {
+      const apiRes = await fetch(NEON_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ trackId, trackTitle, artistName, lyricsData }),

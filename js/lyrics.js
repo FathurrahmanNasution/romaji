@@ -87,13 +87,18 @@ const LYRICS = {
   },
 
   async lrclibQuery(path) {
+    // LRCLIB is occasionally very slow; don't let one request stall the whole lookup
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
     try {
-      const res = await fetch(`https://lrclib.net${path}`);
+      const res = await fetch(`https://lrclib.net${path}`, { signal: ctrl.signal });
       if (!res.ok) return [];
       const data = await res.json();
       return Array.isArray(data) ? data : (data ? [data] : []);
     } catch (e) {
       return [];
+    } finally {
+      clearTimeout(tid);
     }
   },
 
@@ -222,7 +227,9 @@ const LYRICS = {
       const params = new URLSearchParams({ title: trackName, artist: artistName || '', duration: String(durationSec || 0) });
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 15000);
-      const res = await fetch(`/api/qqlyrics?${params}`, { signal: ctrl.signal });
+      // API_BASE: empty on the website (same origin); the Chrome extension points it at the Vercel deployment
+      const base = (typeof self !== 'undefined' && self.API_BASE) || '';
+      const res = await fetch(`${base}/api/qqlyrics?${params}`, { signal: ctrl.signal });
       clearTimeout(tid);
       if (!res.ok) return null;
       const data = await res.json();
